@@ -1,26 +1,29 @@
-FROM python:3.10-slim-bullseye AS builder
+FROM python:3.9-slim
 
-ENV PYTHONUNBUFFERED=1
+WORKDIR /app
 
-RUN apt-get update && apt-get install -y --no-install-recommends libcairo2-dev gcc && rm -rf /var/lib/apt/lists/*
+# Install system dependencies
+RUN apt-get update && apt-get install -y \
+    postgresql-client \
+    libpq-dev \
+    gcc \
+    && rm -rf /var/lib/apt/lists/*
 
-WORKDIR /app/
-
+# Copy requirements
 COPY requirements.txt .
-RUN pip install --no-cache-dir --prefix=/install -r requirements.txt
 
-FROM python:3.10-slim-bullseye AS runtime
+# Install Python dependencies
+RUN pip install --no-cache-dir -r requirements.txt && \
+    pip install --no-cache-dir gunicorn
 
-ENV PYTHONUNBUFFERED=1
-
-WORKDIR /app/
-
-COPY --from=builder /install /usr/local
-
+# Copy application
 COPY . .
 
-RUN chmod +x /app/entrypoint.sh
+# Run migrations
+RUN python manage.py migrate || true
 
+# Expose port
 EXPOSE 8000
 
-CMD ["python3", "manage.py", "runserver"]
+# Start command
+CMD ["gunicorn", "horilla.wsgi:application", "--bind", "0.0.0.0:8000", "--workers", "3"]
