@@ -1,0 +1,11 @@
+[phases.setup]
+nixPkgs = ['python39', 'postgresql']
+
+[phases.install]
+cmds = ['pip install -r requirements.txt', 'pip install gunicorn']
+
+[phases.build]
+cmds = ['python manage.py migrate']
+
+[start]
+cmd = 'gunicorn horilla.wsgi:application --bind 0.0.0.0:8000 --workers 3'
