@@ -18,178 +18,318 @@
 </head>
 
 <style>
-    @media (max-width: 768px) {
-        body {
-            height: auto !important;
+    * {
+        box-sizing: border-box;
+    }
+    
+    body {
+        margin: 0;
+        padding: 0;
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        min-height: 100vh;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
+    
+    .login-container {
+        width: 100%;
+        max-width: 1200px;
+        margin: 20px;
+        background: white;
+        border-radius: 20px;
+        box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+        overflow: hidden;
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        min-height: 600px;
+    }
+    
+    .brand-side {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        padding: 60px;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        color: white;
+        position: relative;
+        overflow: hidden;
+    }
+    
+    .brand-side::before {
+        content: '';
+        position: absolute;
+        width: 300px;
+        height: 300px;
+        background: rgba(255,255,255,0.1);
+        border-radius: 50%;
+        top: -100px;
+        right: -100px;
+    }
+    
+    .brand-logo {
+        max-width: 200px;
+        margin-bottom: 30px;
+        z-index: 1;
+    }
+    
+    .brand-title {
+        font-size: 2.5rem;
+        font-weight: 700;
+        margin: 0 0 15px 0;
+        z-index: 1;
+        text-align: center;
+    }
+    
+    .brand-subtitle {
+        font-size: 1.1rem;
+        opacity: 0.9;
+        z-index: 1;
+        text-align: center;
+    }
+    
+    .form-side {
+        padding: 60px;
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+    }
+    
+    .form-header {
+        margin-bottom: 40px;
+    }
+    
+    .form-title {
+        font-size: 2rem;
+        font-weight: 700;
+        color: #1a202c;
+        margin: 0 0 10px 0;
+    }
+    
+    .form-subtitle {
+        color: #718096;
+        font-size: 0.95rem;
+    }
+    
+    .form-group {
+        margin-bottom: 24px;
+    }
+    
+    .form-label {
+        display: block;
+        font-size: 0.9rem;
+        font-weight: 600;
+        color: #2d3748;
+        margin-bottom: 8px;
+    }
+    
+    .form-input {
+        width: 100%;
+        padding: 14px 16px;
+        font-size: 1rem;
+        border: 2px solid #e2e8f0;
+        border-radius: 10px;
+        transition: all 0.3s;
+        background: #f7fafc;
+    }
+    
+    .form-input:focus {
+        outline: none;
+        border-color: #667eea;
+        background: white;
+        box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+    }
+    
+    .password-wrapper {
+        position: relative;
+    }
+    
+    .btn-primary {
+        width: 100%;
+        padding: 16px;
+        font-size: 1rem;
+        font-weight: 600;
+        color: white;
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        border: none;
+        border-radius: 10px;
+        cursor: pointer;
+        transition: transform 0.2s, box-shadow 0.2s;
+        margin-top: 10px;
+    }
+    
+    .btn-primary:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 10px 25px rgba(102, 126, 234, 0.3);
+    }
+    
+    .btn-secondary {
+        width: 100%;
+        padding: 14px;
+        font-size: 0.95rem;
+        font-weight: 600;
+        border: 2px solid #e2e8f0;
+        border-radius: 10px;
+        cursor: pointer;
+        transition: all 0.2s;
+        background: white;
+        margin-top: 12px;
+    }
+    
+    .btn-init {
+        color: #e53e3e;
+        border-color: #feb2b2;
+        background: #fff5f5;
+    }
+    
+    .btn-demo {
+        color: #38a169;
+        border-color: #9ae6b4;
+        background: #f0fff4;
+    }
+    
+    .forgot-link {
+        display: block;
+        text-align: center;
+        margin-top: 20px;
+        color: #667eea;
+        text-decoration: none;
+        font-size: 0.9rem;
+        font-weight: 500;
+    }
+    
+    .forgot-link:hover {
+        text-decoration: underline;
+    }
+    
+    @media (max-width: 968px) {
+        .login-container {
+            grid-template-columns: 1fr;
+            margin: 0;
+            border-radius: 0;
+            min-height: 100vh;
         }
-        #main {
-            flex-direction: column !important;
-            height: auto !important;
-            min-height: 100vh !important;
+        
+        .brand-side {
+            padding: 40px 20px;
+            min-height: auto;
         }
-        .logo-section {
-            padding: 20px 15px !important;
-            min-height: auto !important;
+        
+        .brand-logo {
+            max-width: 120px;
+            margin-bottom: 20px;
         }
-        .logo-section img {
-            max-width: 100px !important;
-            margin-bottom: 8px !important;
+        
+        .brand-title {
+            font-size: 1.8rem;
         }
-        .logo-section h2 {
-            font-size: 1.1rem !important;
-            margin: 0 !important;
+        
+        .brand-subtitle {
+            font-size: 1rem;
         }
-        .logo-section p {
-            font-size: 0.8rem !important;
-            margin-top: 3px !important;
+        
+        .form-side {
+            padding: 30px 20px;
         }
-        .oh-auth {
-            padding: 15px !important;
-            align-items: flex-start !important;
+        
+        .form-title {
+            font-size: 1.6rem;
         }
-        .oh-auth-card {
-            margin-bottom: 0 !important;
-            max-width: 100% !important;
-            padding: 0 !important;
+        
+        .form-input {
+            font-size: 16px;
+            padding: 14px;
         }
-        .oh-onboarding-card__title {
-            margin: 8px 0 !important;
-            font-size: 1.4rem !important;
-        }
-        .oh-input-group {
-            margin-bottom: 12px !important;
-        }
-        .oh-input, .oh-input--password {
-            font-size: 16px !important;
-            padding: 12px !important;
-            min-height: 48px !important;
-        }
-        .oh-label {
-            font-size: 14px !important;
-            margin-bottom: 6px !important;
-        }
-        .oh-btn {
-            min-height: 48px !important;
-            font-size: 16px !important;
-            padding: 12px !important;
-        }
-        .text-muted {
-            margin-bottom: 8px !important;
-            font-size: 14px !important;
-        }
-        .mt-4 {
-            margin-top: 12px !important;
-        }
-        .mb-4 {
-            margin-bottom: 12px !important;
-        }
-        .my-3 {
-            margin-top: 8px !important;
-            margin-bottom: 8px !important;
-        }
-        small {
-            font-size: 14px !important;
-        }
-        .d-flex.gap-2 {
-            flex-direction: column !important;
-            gap: 8px !important;
+        
+        .btn-primary, .btn-secondary {
+            min-height: 48px;
         }
     }
 </style>
-<body style="margin: 0; padding: 0; min-height: 100vh;">
-    <div id="main" style="display: flex; width: 100%; min-height: 100vh; align-items: stretch;">
-        <div class="oh-alert-container">
-            {% for message in messages %}
-            <div class="oh-alert oh-alert--animated {{ message.tags }}">
-                {{ message }}
-            </div>
-            {% endfor %}
+
+<body>
+    <div class="oh-alert-container">
+        {% for message in messages %}
+        <div class="oh-alert oh-alert--animated {{ message.tags }}">
+            {{ message }}
         </div>
-        <!-- Left Side: Logo and Company Info -->
-        <div class="logo-section" style="flex: 1; background: linear-gradient(135deg, #ffebee 0%, #e3f2fd 100%); display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 40px;">
-            <img src="{% static 'images/meharlogo.png' %}" alt="{{white_label_company_name}}" style="max-width: 400px; height: auto; margin-bottom: 30px;" />
+        {% endfor %}
+    </div>
+    
+    <div class="login-container">
+        <div class="brand-side">
+            <img src="{% static 'images/meharlogo.png' %}" alt="{{white_label_company_name}}" class="brand-logo" />
             {% if white_label_company %}
-            <h2 style="font-size: 2rem; color: #333; text-align: center; margin: 0;">{{white_label_company}}</h2>
-            <p style="font-size: 1.2rem; color: #666; text-align: center; margin-top: 10px;">HRMS Dashboard</p>
+            <h1 class="brand-title">{{white_label_company}}</h1>
+            <p class="brand-subtitle">Human Resource Management System</p>
             {% endif %}
         </div>
-        <!-- Right Side: Login Form -->
-        <main class="oh-auth" style="flex: 1; display: flex; align-items: flex-start; justify-content: center; background: #ffffff; padding: 36px 40px 40px 40px;">
-            <div class="oh-auth-card mb-4" style="width: 100%; max-width: 450px;">
-                <h1 class="oh-onboarding-card__title oh-onboarding-card__title--h2 text-center my-3">
-                    {% trans "Sign In" %}
-                </h1>
-                <p class="text-muted text-center">
-                    {% trans "Please login to access the dashboard." %}
-                </p>
-                <form method="post" class="oh-form-group">
-                    {% csrf_token %}
-                    <div class="oh-input-group">
-                        <label class="oh-label" for="username">{% trans "Username" %}</label>
-                        <input type="text" id="username" name="username" class="oh-input w-100"
-                            placeholder="e.g. adam.luis@horilla.com" />
-                    </div>
-                    <div class="oh-input-group">
-                        <label class="oh-label" for="password">{% trans "Password" %}</label>
-                        <div class="oh-password-input-container">
-                            <input type="password" id="password" name="password"
-                                class="oh-input oh-input--password w-100" placeholder="Use alphanumeric characters" />
-                            <button type="button" class="oh-btn oh-btn--transparent oh-password-input--toggle">
-                                <ion-icon class="oh-passowrd-input__show-icon" title="{% trans 'Show Password' %}"
-                                    name="eye-outline"></ion-icon>
-                                <ion-icon class="oh-passowrd-input__hide-icon d-none" title="{% trans 'Hide Password' %}"
-                                    name="eye-off-outline"></ion-icon>
-                            </button>
-                        </div>
-                    </div>
-                    <button type="submit"
-                        class="oh-btn oh-onboarding-card__button mt-4 oh-btn--secondary oh-btn--shadow w-100 mb-4"
-                        role="button">
-                        <ion-icon class="me-2" name="lock-closed-outline"></ion-icon>
-                        {% trans "Secure Sign-in" %}
-                    </button>
-                    {% if not initialize_database %}
-                        <small class="text-center">
-                            <a href="{% url 'forgot-password' %}" class="oh-link oh-link--secondary justify-content-center">
-                                {% trans "Forgot password" %}?
-                            </a>
-                        </small>
-                    {% endif %}
-                </form>
-                {% if initialize_database %}
-                    <div>
-                        <div class="d-flex gap-2">
-                            <a href="{% url 'initialize-database' %}"
-                                class="oh-btn oh-onboarding-card__button mt-4 oh-btn--secondary oh-btn--shadow w-100 mb-4"
-                                role="button" style="
-                                background-color: rgba(229, 79, 56, 0.1);
-                                color: hsl(8, 77%, 56%);
-                                ">
-                                {% trans "Initialize Database" %}
-                                <ion-icon class="ms-2" name="arrow-forward-outline"></ion-icon>
-                            </a>
-                            <a
-                                onclick="$('#dataLoadAuthentication').toggleClass('oh-modal--show');"
-                                class="oh-btn oh-onboarding-card__button mt-4 oh-btn--secondary oh-btn--shadow w-100 mb-4"
-                                style="background-color: #31b46e1f; color: #1fad61" role="button">
-                                {% trans "Load Demo Data" %}
-                                <ion-icon class="ms-2" name="arrow-forward-outline"></ion-icon>
-                            </a>
-                        </div>
-                    </div>
-                    <div class="oh-modal" id="dataLoadAuthentication" role="dialog" aria-labelledby="dataLoadAuthenticationLabel" aria-hidden="true" style="backdrop-filter: blur(8px);">
-                        <div class="oh-modal__dialog">
-                            {% include "demo_database/auth_load_data.html" %}
-                        </div>
-                    </div>
-                {% endif %}
+        
+        <div class="form-side">
+            <div class="form-header">
+                <h2 class="form-title">{% trans "Welcome Back" %}</h2>
+                <p class="form-subtitle">{% trans "Please login to access your dashboard" %}</p>
             </div>
-        </main>
+            
+            <form method="post">
+                {% csrf_token %}
+                <div class="form-group">
+                    <label class="form-label" for="username">{% trans "Username" %}</label>
+                    <input type="text" id="username" name="username" class="form-input oh-input"
+                        placeholder="Enter your username" required />
+                </div>
+                
+                <div class="form-group">
+                    <label class="form-label" for="password">{% trans "Password" %}</label>
+                    <div class="password-wrapper oh-password-input-container">
+                        <input type="password" id="password" name="password" class="form-input oh-input oh-input--password"
+                            placeholder="Enter your password" required />
+                        <button type="button" class="oh-btn oh-btn--transparent oh-password-input--toggle">
+                            <ion-icon class="oh-passowrd-input__show-icon" title="{% trans 'Show Password' %}"
+                                name="eye-outline"></ion-icon>
+                            <ion-icon class="oh-passowrd-input__hide-icon d-none" title="{% trans 'Hide Password' %}"
+                                name="eye-off-outline"></ion-icon>
+                        </button>
+                    </div>
+                </div>
+                
+                <button type="submit" class="btn-primary">
+                    <ion-icon name="lock-closed-outline" style="vertical-align: middle; margin-right: 8px;"></ion-icon>
+                    {% trans "Sign In" %}
+                </button>
+                
+                {% if not initialize_database %}
+                <a href="{% url 'forgot-password' %}" class="forgot-link">
+                    {% trans "Forgot password" %}?
+                </a>
+                {% endif %}
+            </form>
+            
+            {% if initialize_database %}
+            <div style="margin-top: 30px;">
+                <a href="{% url 'initialize-database' %}" class="btn-secondary btn-init">
+                    {% trans "Initialize Database" %}
+                    <ion-icon name="arrow-forward-outline" style="vertical-align: middle; margin-left: 8px;"></ion-icon>
+                </a>
+                <button onclick="$('#dataLoadAuthentication').toggleClass('oh-modal--show');" class="btn-secondary btn-demo">
+                    {% trans "Load Demo Data" %}
+                    <ion-icon name="arrow-forward-outline" style="vertical-align: middle; margin-left: 8px;"></ion-icon>
+                </button>
+            </div>
+            
+            <div class="oh-modal" id="dataLoadAuthentication" role="dialog" aria-labelledby="dataLoadAuthenticationLabel" aria-hidden="true" style="backdrop-filter: blur(8px);">
+                <div class="oh-modal__dialog">
+                    {% include "demo_database/auth_load_data.html" %}
+                </div>
+            </div>
+            {% endif %}
+        </div>
     </div>
+    
     <script src="{% static '/build/js/web.frontend.min.js' %}"></script>
     <script src="https://code.jquery.com/jquery-3.6.4.min.js"></script>
-    {% comment %} <script type="module" src="https://unpkg.com/ionicons@5.5.2/dist/ionicons/ionicons.esm.js"></script>
-    <script nomodule src="https://unpkg.com/ionicons@5.5.2/dist/ionicons/ionicons.js"></script> {% endcomment %}
     <script type="module"  src="{% static 'images/ionicons/ui_icons/ionicons/ionicons.esm.js' %}"></script>
     <script src="https://cdn.jsdelivr.net/npm/sweetalert2@10"></script>
     <script>
