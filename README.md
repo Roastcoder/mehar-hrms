@@ -308,6 +308,83 @@ python3 manage.py runserver 8080  # For Ubuntu/macOS
 python manage.py runserver 8080   # For Windows
 ```
 
+---
+
+## **Deploy on Coolify VPS**
+
+Coolify is a self-hosted platform that simplifies application deployment. Follow these steps to deploy Horilla on a VPS using Coolify.
+
+### **Prerequisites**
+- A VPS with Ubuntu 20.04+ (2GB RAM minimum, 4GB recommended)
+- Domain name pointed to your VPS IP
+- Coolify installed on your VPS
+
+### **1. Install Coolify**
+
+SSH into your VPS and run:
+```bash
+curl -fsSL https://cdn.coollabs.io/coolify/install.sh | bash
+```
+
+Access Coolify at `http://your-vps-ip:8000`
+
+### **2. Create PostgreSQL Database**
+
+1. In Coolify dashboard, go to **Databases** → **New Database**
+2. Select **PostgreSQL**
+3. Configure:
+   - Database Name: `horilla_main`
+   - Username: `horilla`
+   - Password: `your-secure-password`
+4. Deploy the database
+
+### **3. Deploy Horilla Application**
+
+1. Go to **Projects** → **New Project**
+2. Select **Git Repository**
+3. Enter your repository URL: `https://github.com/Roastcoder/mehar-hrms`
+4. Configure build settings:
+   - Build Pack: **Python**
+   - Python Version: **3.9+**
+   - Install Command: `pip install -r requirements.txt`
+   - Build Command: `python manage.py collectstatic --noinput && python manage.py migrate`
+   - Start Command: `gunicorn horilla.wsgi:application --bind 0.0.0.0:8000`
+
+### **4. Configure Environment Variables**
+
+In Coolify, add these environment variables:
+```env
+DEBUG=False
+SECRET_KEY=your-generated-secret-key
+ALLOWED_HOSTS=yourdomain.com,www.yourdomain.com
+DB_INIT_PASSWORD=your-init-password
+DB_ENGINE=django.db.backends.postgresql
+DB_NAME=horilla_main
+DB_USER=horilla
+DB_PASSWORD=your-secure-password
+DB_HOST=postgres-service-name
+DB_PORT=5432
+```
+
+### **5. Add Gunicorn to Requirements**
+
+Ensure `gunicorn` is in your `requirements.txt`:
+```bash
+echo "gunicorn" >> requirements.txt
+```
+
+### **6. Deploy**
+
+1. Click **Deploy** in Coolify
+2. Monitor logs for any errors
+3. Once deployed, access at your configured domain
+
+### **7. SSL Certificate**
+
+Coolify automatically provisions SSL certificates via Let's Encrypt. Enable it in:
+**Settings** → **SSL** → **Enable Let's Encrypt**
+
+---
 
 ## **Features**
 
