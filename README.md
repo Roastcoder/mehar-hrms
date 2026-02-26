@@ -348,7 +348,7 @@ Access Coolify at `http://your-vps-ip:8000`
    - Base Directory: `/` (root directory)
    - Port: `8000`
    - Install Command: `pip install -r requirements.txt && pip install gunicorn`
-   - Build Command: `python manage.py collectstatic --noinput && python manage.py migrate`
+   - Build Command: `python manage.py migrate`
    - Start Command: `gunicorn horilla.wsgi:application --bind 0.0.0.0:8000 --workers 3`
 
 ### **4. Configure Environment Variables**
@@ -357,14 +357,19 @@ In Coolify, add these environment variables:
 ```env
 DEBUG=False
 SECRET_KEY=your-generated-secret-key
-ALLOWED_HOSTS=yourdomain.com,www.yourdomain.com
+ALLOWED_HOSTS=hrms.meharadvisory.cloud
 DB_INIT_PASSWORD=your-init-password
 DB_ENGINE=django.db.backends.postgresql
-DB_NAME=horilla_main
-DB_USER=horilla
-DB_PASSWORD=your-secure-password
-DB_HOST=postgres-service-name
+DB_NAME=HR
+DB_USER=HRms
+DB_PASSWORD=Hrms@mehar@6378
+DB_HOST=ns48sscogscgc48so0c4w88o
 DB_PORT=5432
+```
+
+**Note**: Use the internal database URL from Coolify. The format is:
+```
+postgres://USERNAME:PASSWORD@HOST:PORT/DATABASE
 ```
 
 ### **5. Add Gunicorn to Requirements**
