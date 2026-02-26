@@ -19,24 +19,38 @@
 
 <style>
     @media (max-width: 768px) {
+        body {
+            height: auto !important;
+        }
         #main {
             flex-direction: column !important;
+            height: auto !important;
+            min-height: 100vh !important;
         }
         .logo-section {
-            padding: 20px !important;
-            min-height: 200px !important;
+            padding: 15px 20px !important;
+            min-height: auto !important;
         }
         .logo-section img {
-            max-width: 200px !important;
+            max-width: 150px !important;
+            margin-bottom: 10px !important;
         }
         .logo-section h2 {
-            font-size: 1.5rem !important;
+            font-size: 1.3rem !important;
+            margin: 5px 0 !important;
         }
         .logo-section p {
-            font-size: 1rem !important;
+            font-size: 0.9rem !important;
+            margin-top: 5px !important;
         }
         .oh-auth {
-            padding: 20px !important;
+            padding: 15px 20px !important;
+        }
+        .oh-auth-card {
+            margin-bottom: 0 !important;
+        }
+        .oh-onboarding-card__title {
+            margin: 10px 0 !important;
         }
     }
 </style>
