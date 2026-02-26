@@ -96,8 +96,8 @@
         }
     }
 </style>
-<body style="margin: 0; padding: 0; min-height: 100vh; display: flex;">
-    <div id="main" style="display: flex; width: 100%; min-height: 100vh;">
+<body style="margin: 0; padding: 0; min-height: 100vh;">
+    <div id="main" style="display: flex; width: 100%; min-height: 100vh; align-items: stretch;">
         <div class="oh-alert-container">
             {% for message in messages %}
             <div class="oh-alert oh-alert--animated {{ message.tags }}">
@@ -114,7 +114,7 @@
             {% endif %}
         </div>
         <!-- Right Side: Login Form -->
-        <main class="oh-auth" style="flex: 1; display: flex; align-items: flex-start; justify-content: center; background: #ffffff; padding: 60px 40px 40px 40px;">
+        <main class="oh-auth" style="flex: 1; display: flex; align-items: flex-start; justify-content: center; background: #ffffff; padding: 36px 40px 40px 40px;">
             <div class="oh-auth-card mb-4" style="width: 100%; max-width: 450px;">
                 <h1 class="oh-onboarding-card__title oh-onboarding-card__title--h2 text-center my-3">
                     {% trans "Sign In" %}
