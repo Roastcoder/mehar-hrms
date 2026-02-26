@@ -19,11 +19,11 @@ RUN pip install --no-cache-dir -r requirements.txt && \
 # Copy application
 COPY . .
 
-# Run migrations
-RUN python manage.py migrate || true
-
 # Expose port
 EXPOSE 8000
 
-# Start command
-CMD ["gunicorn", "horilla.wsgi:application", "--bind", "0.0.0.0:8000", "--workers", "3"]
+# Start script
+COPY docker-entrypoint.sh /docker-entrypoint.sh
+RUN chmod +x /docker-entrypoint.sh
+
+ENTRYPOINT ["/docker-entrypoint.sh"]
