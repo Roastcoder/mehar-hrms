@@ -344,11 +344,12 @@ Access Coolify at `http://your-vps-ip:8000`
 2. Select **Git Repository**
 3. Enter your repository URL: `https://github.com/Roastcoder/mehar-hrms`
 4. Configure build settings:
-   - Build Pack: **Python**
-   - Python Version: **3.9+**
-   - Install Command: `pip install -r requirements.txt`
+   - Build Pack: **Nixpacks** (auto-detected for Python)
+   - Base Directory: `/` (root directory)
+   - Port: `8000`
+   - Install Command: `pip install -r requirements.txt && pip install gunicorn`
    - Build Command: `python manage.py collectstatic --noinput && python manage.py migrate`
-   - Start Command: `gunicorn horilla.wsgi:application --bind 0.0.0.0:8000`
+   - Start Command: `gunicorn horilla.wsgi:application --bind 0.0.0.0:8000 --workers 3`
 
 ### **4. Configure Environment Variables**
 
