@@ -26,7 +26,7 @@
         margin: 0;
         padding: 0;
         font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
-        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
         min-height: 100vh;
         display: flex;
         align-items: center;
@@ -47,13 +47,13 @@
     }
     
     .brand-side {
-        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        background: linear-gradient(135deg, #ffebee 0%, #e3f2fd 100%);
         padding: 60px;
         display: flex;
         flex-direction: column;
         align-items: center;
         justify-content: center;
-        color: white;
+        color: #333;
         position: relative;
         overflow: hidden;
     }
@@ -63,7 +63,7 @@
         position: absolute;
         width: 300px;
         height: 300px;
-        background: rgba(255,255,255,0.1);
+        background: rgba(255,255,255,0.3);
         border-radius: 50%;
         top: -100px;
         right: -100px;
@@ -81,13 +81,15 @@
         margin: 0 0 15px 0;
         z-index: 1;
         text-align: center;
+        color: #333;
     }
     
     .brand-subtitle {
         font-size: 1.1rem;
-        opacity: 0.9;
+        opacity: 0.8;
         z-index: 1;
         text-align: center;
+        color: #666;
     }
     
     .form-side {
@@ -137,9 +139,9 @@
     
     .form-input:focus {
         outline: none;
-        border-color: #667eea;
+        border-color: #5a67d8;
         background: white;
-        box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+        box-shadow: 0 0 0 3px rgba(90, 103, 216, 0.1);
     }
     
     .password-wrapper {
@@ -152,7 +154,7 @@
         font-size: 1rem;
         font-weight: 600;
         color: white;
-        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        background: linear-gradient(135deg, #5a67d8 0%, #667eea 100%);
         border: none;
         border-radius: 10px;
         cursor: pointer;
@@ -162,7 +164,7 @@
     
     .btn-primary:hover {
         transform: translateY(-2px);
-        box-shadow: 0 10px 25px rgba(102, 126, 234, 0.3);
+        box-shadow: 0 10px 25px rgba(90, 103, 216, 0.3);
     }
     
     .btn-secondary {
@@ -194,7 +196,7 @@
         display: block;
         text-align: center;
         margin-top: 20px;
-        color: #667eea;
+        color: #5a67d8;
         text-decoration: none;
         font-size: 0.9rem;
         font-weight: 500;
