@@ -18,8 +18,12 @@ from base.forms import AttendanceAllowedIPForm
 from base.models import AttendanceAllowedIP
 
 from .views import views
+from .zkteco_views import iclock_cdata
 
 urlpatterns = [
+    # ZKTeco Biometric Device Integration
+    path("iclock/cdata", iclock_cdata, name="iclock-cdata"),
+    
     path(
         "profile-attendance-tab",
         views.profile_attendance_tab,
