@@ -20,7 +20,7 @@
         
         <!-- Admin/Manager Only -->
         {% if user.is_staff or user.groups.all %}
-            <div class="nav-item" onclick="window.location.href='/employee/'">
+            <div class="nav-item" onclick="window.location.href='/employee/employee-view/'">
                 <ion-icon name="people-outline"></ion-icon>
                 <span>Employees</span>
             </div>
