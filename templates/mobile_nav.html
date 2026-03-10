@@ -1,0 +1,184 @@
+{% load static %}
+<!-- Mobile Bottom Navigation -->
+<div class="mobile-bottom-nav">
+    <div class="nav-item" onclick="window.location.href='/'">
+        <ion-icon name="home-outline"></ion-icon>
+        <span>Home</span>
+    </div>
+    
+    {% if user.is_authenticated %}
+        <!-- Employee Navigation -->
+        <div class="nav-item" onclick="window.location.href='/attendance/view-my-attendance/'">
+            <ion-icon name="time-outline"></ion-icon>
+            <span>Attendance</span>
+        </div>
+        
+        <div class="nav-item" onclick="window.location.href='/leave/'">
+            <ion-icon name="calendar-outline"></ion-icon>
+            <span>Leave</span>
+        </div>
+        
+        <!-- Admin/Manager Only -->
+        {% if user.is_staff or user.groups.all %}
+            <div class="nav-item" onclick="window.location.href='/employee/'">
+                <ion-icon name="people-outline"></ion-icon>
+                <span>Employees</span>
+            </div>
+            
+            <div class="nav-item" onclick="window.location.href='/attendance/attendance-view/'">
+                <ion-icon name="analytics-outline"></ion-icon>
+                <span>Reports</span>
+            </div>
+        {% endif %}
+        
+        <!-- Profile -->
+        <div class="nav-item" onclick="window.location.href='/employee/employee-profile/'">
+            <ion-icon name="person-outline"></ion-icon>
+            <span>Profile</span>
+        </div>
+    {% else %}
+        <!-- Guest Navigation -->
+        <div class="nav-item" onclick="window.location.href='/login/'">
+            <ion-icon name="log-in-outline"></ion-icon>
+            <span>Login</span>
+        </div>
+        
+        <div class="nav-item" onclick="window.location.href='/signup/'">
+            <ion-icon name="person-add-outline"></ion-icon>
+            <span>Sign Up</span>
+        </div>
+    {% endif %}
+</div>
+
+<style>
+.mobile-bottom-nav {
+    display: none;
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    background: white;
+    border-top: 1px solid #e2e8f0;
+    padding: 8px 0;
+    z-index: 1000;
+    box-shadow: 0 -2px 10px rgba(0,0,0,0.1);
+}
+
+.mobile-bottom-nav .nav-item {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 8px 4px;
+    cursor: pointer;
+    transition: all 0.2s;
+    border-radius: 8px;
+    margin: 0 4px;
+}
+
+.mobile-bottom-nav .nav-item:hover {
+    background: #f7fafc;
+}
+
+.mobile-bottom-nav .nav-item ion-icon {
+    font-size: 20px;
+    color: #4a5568;
+    margin-bottom: 2px;
+}
+
+.mobile-bottom-nav .nav-item span {
+    font-size: 10px;
+    color: #4a5568;
+    font-weight: 500;
+}
+
+.mobile-bottom-nav .nav-item.active ion-icon,
+.mobile-bottom-nav .nav-item.active span {
+    color: #667eea;
+}
+
+/* Show on mobile devices */
+@media (max-width: 768px) {
+    .mobile-bottom-nav {
+        display: flex;
+    }
+    
+    /* Hide desktop sidebar on mobile */
+    .oh-sidebar,
+    .sidebar,
+    #sidebar {
+        display: none !important;
+        transform: translateX(-100%) !important;
+    }
+    
+    /* Auto-hide sidebar overlay */
+    .oh-sidebar-overlay {
+        display: none !important;
+    }
+    
+    /* Adjust main content for bottom nav */
+    .oh-main-wrapper,
+    .main-content,
+    #main {
+        padding-bottom: 70px !important;
+        margin-left: 0 !important;
+        width: 100% !important;
+    }
+    
+    /* Hide desktop navigation */
+    .oh-navbar .navbar-nav,
+    .navbar-nav {
+        display: none !important;
+    }
+    
+    /* Hide sidebar toggle button */
+    .oh-navbar__toggle-container .oh-navbar__toggle-link {
+        display: none !important;
+    }
+    
+    /* Full width navbar */
+    .oh-navbar {
+        width: 100% !important;
+        margin-left: 0 !important;
+    }
+    
+    /* Wrapper adjustments */
+    .oh-wrapper-main {
+        margin-left: 0 !important;
+    }
+}
+
+/* Responsive navigation items */
+@media (max-width: 480px) {
+    .mobile-bottom-nav {
+        padding: 6px 0;
+    }
+    
+    .mobile-bottom-nav .nav-item {
+        padding: 6px 2px;
+    }
+    
+    .mobile-bottom-nav .nav-item ion-icon {
+        font-size: 18px;
+    }
+    
+    .mobile-bottom-nav .nav-item span {
+        font-size: 9px;
+    }
+}
+</style>
+
+<script>
+// Highlight active navigation item
+document.addEventListener('DOMContentLoaded', function() {
+    const currentPath = window.location.pathname;
+    const navItems = document.querySelectorAll('.mobile-bottom-nav .nav-item');
+    
+    navItems.forEach(item => {
+        const onclick = item.getAttribute('onclick');
+        if (onclick && onclick.includes(currentPath)) {
+            item.classList.add('active');
+        }
+    });
+});
+</script>
