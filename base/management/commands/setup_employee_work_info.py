@@ -23,15 +23,15 @@ class Command(BaseCommand):
 
         # Get or create default department
         department, created = Department.objects.get_or_create(
-            department='General',
-            defaults={'company_id': company}
+            department='Sales'
         )
         if created:
+            department.company_id.set([company])
             self.stdout.write(f"Created department: {department}")
 
         # Get or create default job position
         job_position, created = JobPosition.objects.get_or_create(
-            job_position='Employee',
+            job_position='Sales Executive',
             defaults={'department_id': department}
         )
         if created:
