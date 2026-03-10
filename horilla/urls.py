@@ -20,6 +20,7 @@ from django.http import JsonResponse
 from django.urls import include, path, re_path
 
 import notifications.urls
+from base.signup_view import signup
 
 from . import settings
 
@@ -30,6 +31,7 @@ def health_check(request):
 
 urlpatterns = [
     path("admin/", admin.site.urls),
+    path("signup/", signup, name="signup"),
     path("accounts/", include("django.contrib.auth.urls")),
     path("accounts/", include("django.contrib.auth.urls")),
     path("", include("base.urls")),

@@ -6,7 +6,7 @@
     <meta charset="UTF-8" />
     <meta http-equiv="X-UA-Compatible" content="IE=edge" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Login - {{white_label_company_name}} Dashboard</title>
+    <title>Sign Up - {{white_label_company_name}} Dashboard</title>
     <link rel="apple-touch-icon" sizes="180x180"
         href="{% if white_label_company.icon %}{{white_label_company.icon.url}} {% else %}{% static 'favicons/apple-touch-icon.png' %}{% endif %}">
     <link rel="icon" type="image/png" sizes="32x32"
@@ -33,7 +33,7 @@
         justify-content: center;
     }
     
-    .login-container {
+    .signup-container {
         width: 100%;
         max-width: 1200px;
         margin: 20px;
@@ -100,7 +100,7 @@
     }
     
     .form-header {
-        margin-bottom: 40px;
+        margin-bottom: 30px;
     }
     
     .form-title {
@@ -116,7 +116,7 @@
     }
     
     .form-group {
-        margin-bottom: 24px;
+        margin-bottom: 20px;
     }
     
     .form-label {
@@ -167,32 +167,7 @@
         box-shadow: 0 10px 25px rgba(90, 103, 216, 0.3);
     }
     
-    .btn-secondary {
-        width: 100%;
-        padding: 14px;
-        font-size: 0.95rem;
-        font-weight: 600;
-        border: 2px solid #e2e8f0;
-        border-radius: 10px;
-        cursor: pointer;
-        transition: all 0.2s;
-        background: white;
-        margin-top: 12px;
-    }
-    
-    .btn-init {
-        color: #e53e3e;
-        border-color: #feb2b2;
-        background: #fff5f5;
-    }
-    
-    .btn-demo {
-        color: #38a169;
-        border-color: #9ae6b4;
-        background: #f0fff4;
-    }
-    
-    .forgot-link {
+    .login-link {
         display: block;
         text-align: center;
         margin-top: 20px;
@@ -202,12 +177,12 @@
         font-weight: 500;
     }
     
-    .forgot-link:hover {
+    .login-link:hover {
         text-decoration: underline;
     }
     
     @media (max-width: 968px) {
-        .login-container {
+        .signup-container {
             grid-template-columns: 1fr;
             margin: 0;
             border-radius: 0;
@@ -245,7 +220,7 @@
             padding: 14px;
         }
         
-        .btn-primary, .btn-secondary {
+        .btn-primary {
             min-height: 48px;
         }
     }
@@ -260,7 +235,7 @@
         {% endfor %}
     </div>
     
-    <div class="login-container">
+    <div class="signup-container">
         <div class="brand-side">
             <img src="{% static 'images/meharlogo.png' %}" alt="{{white_label_company_name}}" class="brand-logo" />
             {% if white_label_company %}
@@ -271,65 +246,39 @@
         
         <div class="form-side">
             <div class="form-header">
-                <h2 class="form-title">{% trans "Welcome Back" %}</h2>
-                <p class="form-subtitle">{% trans "Please login to access your dashboard" %}</p>
+                <h2 class="form-title">{% trans "Create Account" %}</h2>
+                <p class="form-subtitle">{% trans "Sign up to get started with HRMS" %}</p>
             </div>
             
             <form method="post">
                 {% csrf_token %}
                 <div class="form-group">
-                    <label class="form-label" for="username">{% trans "Username" %}</label>
-                    <input type="text" id="username" name="username" class="form-input oh-input"
-                        placeholder="Enter your username" required />
+                    <label class="form-label" for="name">{% trans "Full Name" %}</label>
+                    <input type="text" id="name" name="name" class="form-input"
+                        placeholder="Enter your full name" required />
                 </div>
                 
                 <div class="form-group">
-                    <label class="form-label" for="password">{% trans "Password" %}</label>
-                    <div class="password-wrapper oh-password-input-container">
-                        <input type="password" id="password" name="password" class="form-input oh-input oh-input--password"
-                            placeholder="Enter your password" required />
-                        <button type="button" class="oh-btn oh-btn--transparent oh-password-input--toggle">
-                            <ion-icon class="oh-passowrd-input__show-icon" title="{% trans 'Show Password' %}"
-                                name="eye-outline"></ion-icon>
-                            <ion-icon class="oh-passowrd-input__hide-icon d-none" title="{% trans 'Hide Password' %}"
-                                name="eye-off-outline"></ion-icon>
-                        </button>
-                    </div>
+                    <label class="form-label" for="email">{% trans "Email" %}</label>
+                    <input type="email" id="email" name="email" class="form-input"
+                        placeholder="Enter your email" required />
+                </div>
+                
+                <div class="form-group">
+                    <label class="form-label" for="phone">{% trans "Contact Number" %}</label>
+                    <input type="tel" id="phone" name="phone" class="form-input"
+                        placeholder="Enter your contact number" required />
                 </div>
                 
                 <button type="submit" class="btn-primary">
-                    <ion-icon name="lock-closed-outline" style="vertical-align: middle; margin-right: 8px;"></ion-icon>
-                    {% trans "Sign In" %}
+                    <ion-icon name="person-add-outline" style="vertical-align: middle; margin-right: 8px;"></ion-icon>
+                    {% trans "Sign Up" %}
                 </button>
                 
-                {% if not initialize_database %}
-                <a href="{% url 'forgot-password' %}" class="forgot-link">
-                    {% trans "Forgot password" %}?
+                <a href="{% url 'login' %}" class="login-link">
+                    {% trans "Already have an account? Sign In" %}
                 </a>
-                <a href="{% url 'signup' %}" class="forgot-link" style="margin-top: 10px;">
-                    {% trans "Don't have an account? Sign Up" %}
-                </a>
-                {% endif %}
             </form>
-            
-            {% if initialize_database %}
-            <div style="margin-top: 30px;">
-                <a href="{% url 'initialize-database' %}" class="btn-secondary btn-init">
-                    {% trans "Initialize Database" %}
-                    <ion-icon name="arrow-forward-outline" style="vertical-align: middle; margin-left: 8px;"></ion-icon>
-                </a>
-                <button onclick="$('#dataLoadAuthentication').toggleClass('oh-modal--show');" class="btn-secondary btn-demo">
-                    {% trans "Load Demo Data" %}
-                    <ion-icon name="arrow-forward-outline" style="vertical-align: middle; margin-left: 8px;"></ion-icon>
-                </button>
-            </div>
-            
-            <div class="oh-modal" id="dataLoadAuthentication" role="dialog" aria-labelledby="dataLoadAuthenticationLabel" aria-hidden="true" style="backdrop-filter: blur(8px);">
-                <div class="oh-modal__dialog">
-                    {% include "demo_database/auth_load_data.html" %}
-                </div>
-            </div>
-            {% endif %}
         </div>
     </div>
     
@@ -337,18 +286,6 @@
     <script src="https://code.jquery.com/jquery-3.6.4.min.js"></script>
     <script type="module"  src="{% static 'images/ionicons/ui_icons/ionicons/ionicons.esm.js' %}"></script>
     <script src="https://cdn.jsdelivr.net/npm/sweetalert2@10"></script>
-    <script>
-        $(document).ready(function () {
-            if ($(".oh-alert--warning").length > 0) {
-                Swal.fire({
-                    title: 'Access Denied !',
-                    text: 'Your login credentials are currently blocked. Please contact HR administrators for assistance.',
-                    icon: 'warning',
-                    confirmButtonText: 'OK',
-                });
-            }
-        });
-    </script>
 </body>
 
 </html>
