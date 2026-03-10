@@ -1077,9 +1077,15 @@ def employee_view(request):
     error_message = request.session.pop("error_message", None)
 
     queryset = Employee.objects.filter()
+    selected_company = request.session.get("selected_company")
     filter_obj = EmployeeFilter(request.GET, queryset=queryset).qs
     if request.GET.get("is_active") != "False":
         filter_obj = filter_obj.filter(is_active=True)
+    if (
+        request.GET.get("employee_work_info__company_id") == None
+        and selected_company != "all"
+    ):
+        filter_obj = filter_obj.filter(employee_work_info__company_id=selected_company)
 
     update_fields = BulkUpdateFieldForm()
     data_dict = parse_qs(previous_data)
