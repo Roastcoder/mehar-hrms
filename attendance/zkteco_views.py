@@ -21,6 +21,7 @@ from employee.models import Employee
 logger = logging.getLogger(__name__)
 ADMS_LAST_SEEN_ANY_KEY = "zkteco_adms_last_seen_any"
 ADMS_LAST_SEEN_SN_PREFIX = "zkteco_adms_last_seen_sn_"
+ADMS_ATT_TABLES = {"ATTLOG", "RTLOG"}
 
 
 def _first(values, default=""):
@@ -51,6 +52,16 @@ def _sn_cache_key(sn: str) -> str:
     return f"{ADMS_LAST_SEEN_SN_PREFIX}{digest}"
 
 
+def _qs_get(parsed, keys, default=""):
+    """
+    Case/variant-tolerant querystring getter.
+    """
+    for key in keys:
+        if key in parsed and parsed.get(key):
+            return _first(parsed.get(key), default)
+    return default
+
+
 def _parse_adms_lines(raw_text, query_string):
     """
     Parse ADMS key/value records and return normalized dictionaries.
@@ -64,16 +75,29 @@ def _parse_adms_lines(raw_text, query_string):
     for line in lines:
         if "=" in line and "&" in line:
             parsed = parse_qs(line, keep_blank_values=True)
-            table = _first(parsed.get("table"), "")
-            # Only ATTLOG is attendance. Ignore device ops/user/fp/etc.
-            if str(table).upper() == "ATTLOG":
+            table = _qs_get(parsed, ["table", "TABLE"], "")
+            table_upper = str(table).upper()
+
+            # Some firmwares omit `table` on the per-row payload. Treat those as realtime logs.
+            if not table_upper and (
+                _qs_get(parsed, ["PIN", "pin"], "")
+                and _qs_get(parsed, ["time", "Time", "timestamp", "Timestamp"], "")
+            ):
+                table_upper = "RTLOG"
+
+            # Only attendance tables are processed. Ignore device ops/user/fp/etc.
+            if table_upper in ADMS_ATT_TABLES:
                 records.append(
                     {
-                        "sn": _first(parsed.get("SN"), ""),
-                        "table": table,
-                        "pin": _first(parsed.get("PIN"), ""),
-                        "time": _first(parsed.get("time"), ""),
-                        "status": _first(parsed.get("status"), ""),
+                        "sn": _qs_get(parsed, ["SN", "sn"], ""),
+                        "table": table_upper,
+                        "pin": _qs_get(parsed, ["PIN", "pin"], ""),
+                        "time": _qs_get(
+                            parsed,
+                            ["time", "Time", "timestamp", "Timestamp", "datetime", "DateTime"],
+                            "",
+                        ),
+                        "status": _qs_get(parsed, ["status", "Status", "punch", "Punch"], ""),
                     }
                 )
             continue
@@ -96,7 +120,8 @@ def _parse_adms_lines(raw_text, query_string):
         # Some devices send rows as: PIN<TAB>time<TAB>status...
         parts = line.split("\t")
         if len(parts) >= 2:
-            if parts[0].strip().upper() == "ATTLOG" and len(parts) >= 4:
+            first_col = parts[0].strip().upper()
+            if first_col in ADMS_ATT_TABLES and len(parts) >= 4:
                 pin = parts[1].strip()
                 time_str = parts[2].strip()
                 status = parts[3].strip()
@@ -112,7 +137,7 @@ def _parse_adms_lines(raw_text, query_string):
             records.append(
                 {
                     "sn": "",
-                    "table": "ATTLOG",
+                    "table": "RTLOG",
                     "pin": pin,
                     "time": time_str,
                     "status": status,
@@ -318,7 +343,7 @@ def iclock_cdata(request):
 
         for record in records:
             table = (record.get("table") or "").upper()
-            if table and table != "ATTLOG":
+            if table and table not in ADMS_ATT_TABLES:
                 continue
 
             device_sn = (record.get("sn") or request.GET.get("SN") or "").strip()

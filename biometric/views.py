@@ -8,6 +8,7 @@ registered on biometric devices.
 
 import json
 import logging
+import hashlib
 from datetime import datetime, timedelta
 from threading import Event, Thread
 from urllib.parse import parse_qs, unquote
@@ -59,6 +60,13 @@ from .models import BiometricDevices, BiometricEmployees, COSECAttendanceArgumen
 logger = logging.getLogger(__name__)
 ADMS_LAST_SEEN_ANY_KEY = "zkteco_adms_last_seen_any"
 ADMS_LAST_SEEN_SN_PREFIX = "zkteco_adms_last_seen_sn_"
+
+
+def _sn_cache_key(sn: str) -> str:
+    if not sn:
+        return ""
+    digest = hashlib.md5(sn.encode("utf-8", errors="ignore")).hexdigest()
+    return f"{ADMS_LAST_SEEN_SN_PREFIX}{digest}"
 
 
 def str_time_seconds(time):
@@ -1146,7 +1154,7 @@ def _is_recent_adms_seen(device):
     Check whether ADMS callbacks were received recently for this device (or globally).
     """
     possible_sn = (device.name or "").strip()
-    if possible_sn and cache.get(f"{ADMS_LAST_SEEN_SN_PREFIX}{possible_sn}"):
+    if possible_sn and cache.get(_sn_cache_key(possible_sn)):
         return True
     return bool(cache.get(ADMS_LAST_SEEN_ANY_KEY))
 
