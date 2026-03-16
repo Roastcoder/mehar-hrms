@@ -128,12 +128,82 @@ class EmployeeFaceDetectionGetPostAPIView(APIView):
             if isinstance(data, QueryDict):
                 data = data.dict()
             data["employee_id"] = employee_id
-            serializer = EmployeeFaceDetectionSerializer(data=data)
-            if serializer.is_valid():
-                serializer.save()
-                return Response(serializer.data, status=status.HTTP_201_CREATED)
-            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+            
+            # Check if employee already has face detection record
+            try:
+                existing_record = EmployeeFaceDetection.objects.get(employee_id=employee_id)
+                # Update existing record
+                serializer = EmployeeFaceDetectionSerializer(existing_record, data=data)
+                if serializer.is_valid():
+                    serializer.save()
+                    return Response(
+                        {
+                            "message": "Face detection image updated successfully",
+                            "data": serializer.data
+                        }, 
+                        status=status.HTTP_200_OK
+                    )
+                return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+            except EmployeeFaceDetection.DoesNotExist:
+                # Create new record
+                serializer = EmployeeFaceDetectionSerializer(data=data)
+                if serializer.is_valid():
+                    serializer.save()
+                    return Response(
+                        {
+                            "message": "Face detection image uploaded successfully",
+                            "data": serializer.data
+                        }, 
+                        status=status.HTTP_201_CREATED
+                    )
+                return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
         raise serializers.ValidationError("Facedetection not yet started..")
+
+
+    def put(self, request):
+        """Update existing face detection image for the current user."""
+        if self.get_facedetection(request).start:
+            employee_id = request.user.employee_get.id
+            try:
+                existing_record = EmployeeFaceDetection.objects.get(employee_id=employee_id)
+                data = request.data
+                if isinstance(data, QueryDict):
+                    data = data.dict()
+                data["employee_id"] = employee_id
+                
+                serializer = EmployeeFaceDetectionSerializer(existing_record, data=data)
+                if serializer.is_valid():
+                    serializer.save()
+                    return Response(
+                        {
+                            "message": "Face detection image updated successfully",
+                            "data": serializer.data
+                        }, 
+                        status=status.HTTP_200_OK
+                    )
+                return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+            except EmployeeFaceDetection.DoesNotExist:
+                return Response(
+                    {"detail": "No face detection record found for this employee."},
+                    status=status.HTTP_404_NOT_FOUND,
+                )
+        raise serializers.ValidationError("Facedetection not yet started..")
+
+    def delete(self, request):
+        """Delete face detection record for the current user."""
+        employee_id = request.user.employee_get.id
+        try:
+            existing_record = EmployeeFaceDetection.objects.get(employee_id=employee_id)
+            existing_record.delete()
+            return Response(
+                {"message": "Face detection record deleted successfully"},
+                status=status.HTTP_200_OK,
+            )
+        except EmployeeFaceDetection.DoesNotExist:
+            return Response(
+                {"detail": "No face detection record found for this employee."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
 
 
 def get_company(request):

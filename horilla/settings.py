@@ -226,6 +226,17 @@ USE_L10N = True
 
 USE_TZ = True
 
+# Email Configuration
+EMAIL_BACKEND = env('EMAIL_BACKEND', default='django.core.mail.backends.smtp.EmailBackend')
+EMAIL_HOST = env('EMAIL_HOST', default='smtp.hostinger.com')
+EMAIL_PORT = env('EMAIL_PORT', default=465)
+EMAIL_USE_SSL = env('EMAIL_USE_SSL', default=True)
+EMAIL_USE_TLS = env('EMAIL_USE_TLS', default=False)
+EMAIL_HOST_USER = env('EMAIL_HOST_USER', default='noreply@marketvry.com')
+EMAIL_HOST_PASSWORD = env('EMAIL_HOST_PASSWORD', default='')
+DEFAULT_FROM_EMAIL = env('DEFAULT_FROM_EMAIL', default='Mehar Advisory <noreply@marketvry.com>')
+EMAIL_TIMEOUT = env('EMAIL_TIMEOUT', default=60)
+
 # Production settings
 if not DEBUG:
     SECURE_BROWSER_XSS_FILTER = True
