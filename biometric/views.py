@@ -15,6 +15,7 @@ from urllib.parse import parse_qs, unquote
 import pytz
 from apscheduler.schedulers.background import BackgroundScheduler
 from django.contrib import messages
+from django.core.cache import cache
 from django.http import HttpResponse, JsonResponse
 from django.shortcuts import redirect, render
 from django.template.loader import render_to_string
@@ -56,6 +57,8 @@ from .forms import (
 from .models import BiometricDevices, BiometricEmployees, COSECAttendanceArguments
 
 logger = logging.getLogger(__name__)
+ADMS_LAST_SEEN_ANY_KEY = "zkteco_adms_last_seen_any"
+ADMS_LAST_SEEN_SN_PREFIX = "zkteco_adms_last_seen_sn_"
 
 
 def str_time_seconds(time):
@@ -673,44 +676,34 @@ def render_connection_response(title, text, icon):
 
 
 def test_zkteco_connection(device):
-    """Test connection for ZKTeco device."""
-    conn = None
-    port_no = device.port
-    machine_ip = device.machine_ip
-    password = device.zk_password
-    zk_device = ZK(
-        machine_ip,
-        port=port_no,
-        timeout=60,
-        password=int(password),
-        force_udp=False,
-        ommit_ping=False,
-    )
-    try:
-        conn = zk_device.connect()
-        conn.test_voice(index=0)
-        find_employees_in_zk(device.id)
+    """ADMS-focused health check for ZKTeco devices (no direct TCP test)."""
+    now = django_timezone.now()
+    last_seen = None
+
+    # Use device name as optional serial fallback if it matches SN used by device.
+    possible_sn = (device.name or "").strip()
+    if possible_sn:
+        last_seen = cache.get(f"{ADMS_LAST_SEEN_SN_PREFIX}{possible_sn}")
+
+    if not last_seen:
+        last_seen = cache.get(ADMS_LAST_SEEN_ANY_KEY)
+
+    if last_seen:
         return render_connection_response(
-            _("Connection Successful"),
-            _("ZKTeco test connection successful."),
+            _("ADMS Receiving"),
+            _(
+                "ADMS requests are being received by this server. Direct TCP test is intentionally skipped."
+            ),
             "success",
         )
-    except zk_exception.ZKErrorResponse:
-        return render_connection_response(
-            _("Authentication Error"),
-            _("Double-check the provided IP, Port, and Password."),
-            "warning",
-        )
-    except Exception:
-        logger.error("ZKTeco connection error", exc_info=True)
-        return render_connection_response(
-            _("Connection unsuccessful"),
-            _("Please check the IP, Port, and Password."),
-            "warning",
-        )
-    finally:
-        if conn is not None:
-            conn.disconnect()
+
+    return render_connection_response(
+        _("Waiting For ADMS Push"),
+        _(
+            "No recent ADMS request received yet. Ensure device server URL points to /iclock and is reachable over HTTPS."
+        ),
+        "warning",
+    )
 
 
 def test_anviz_connection(device):

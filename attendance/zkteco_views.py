@@ -7,6 +7,7 @@ from datetime import datetime
 from urllib.parse import parse_qs
 
 from django.http import HttpResponse
+from django.core.cache import cache
 from django.utils import timezone
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_http_methods
@@ -17,6 +18,8 @@ from attendance.views.clock_in_out import clock_in
 from employee.models import Employee
 
 logger = logging.getLogger(__name__)
+ADMS_LAST_SEEN_ANY_KEY = "zkteco_adms_last_seen_any"
+ADMS_LAST_SEEN_SN_PREFIX = "zkteco_adms_last_seen_sn_"
 
 
 def _first(values, default=""):
@@ -176,6 +179,8 @@ def iclock_cdata(request):
         query_string,
         raw_body[:2000],
     )
+    now_iso = timezone.now().isoformat()
+    cache.set(ADMS_LAST_SEEN_ANY_KEY, now_iso, timeout=60 * 60 * 24)
 
     try:
         records = _parse_adms_lines(raw_body, query_string)
@@ -187,6 +192,12 @@ def iclock_cdata(request):
                 continue
 
             device_sn = (record.get("sn") or request.GET.get("SN") or "").strip()
+            if device_sn:
+                cache.set(
+                    f"{ADMS_LAST_SEEN_SN_PREFIX}{device_sn}",
+                    now_iso,
+                    timeout=60 * 60 * 24,
+                )
             pin = (record.get("pin") or "").strip()
             time_str = (record.get("time") or "").strip()
             status = (record.get("status") or "").strip()
@@ -234,6 +245,11 @@ def iclock_ping(request):
         request.path,
         request.META.get("QUERY_STRING", ""),
     )
+    now_iso = timezone.now().isoformat()
+    cache.set(ADMS_LAST_SEEN_ANY_KEY, now_iso, timeout=60 * 60 * 24)
+    sn = request.GET.get("SN", "").strip()
+    if sn:
+        cache.set(f"{ADMS_LAST_SEEN_SN_PREFIX}{sn}", now_iso, timeout=60 * 60 * 24)
     return HttpResponse("OK", status=200, content_type="text/plain")
 
 
@@ -248,4 +264,9 @@ def iclock_getrequest(request):
         request.path,
         request.META.get("QUERY_STRING", ""),
     )
+    now_iso = timezone.now().isoformat()
+    cache.set(ADMS_LAST_SEEN_ANY_KEY, now_iso, timeout=60 * 60 * 24)
+    sn = request.GET.get("SN", "").strip()
+    if sn:
+        cache.set(f"{ADMS_LAST_SEEN_SN_PREFIX}{sn}", now_iso, timeout=60 * 60 * 24)
     return HttpResponse("OK", status=200, content_type="text/plain")
