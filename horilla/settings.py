@@ -31,6 +31,10 @@ env = environ.Env(
     ),
     ALLOWED_HOSTS=(list, ["*"]),
     CSRF_TRUSTED_ORIGINS=(list, ["http://localhost:8000"]),
+    FACE_AUTH_PROVIDER=(str, "basic"),
+    FACE_AUTH_THRESHOLD=(float, 0.82),
+    FACE_AUTH_MODEL_NAME=(str, "ArcFace"),
+    FACE_AUTH_DETECTOR_BACKEND=(str, "opencv"),
 )
 
 env.read_env(os.path.join(BASE_DIR, ".env"), overwrite=True)
@@ -186,6 +190,10 @@ MESSAGE_TAGS = {
 
 
 CSRF_TRUSTED_ORIGINS = env("CSRF_TRUSTED_ORIGINS")
+FACE_AUTH_PROVIDER = env("FACE_AUTH_PROVIDER")
+FACE_AUTH_THRESHOLD = env("FACE_AUTH_THRESHOLD")
+FACE_AUTH_MODEL_NAME = env("FACE_AUTH_MODEL_NAME")
+FACE_AUTH_DETECTOR_BACKEND = env("FACE_AUTH_DETECTOR_BACKEND")
 
 LOGIN_URL = "/login"
 

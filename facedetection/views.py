@@ -1,5 +1,6 @@
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required, permission_required
+from django.conf import settings
 from django.http import QueryDict
 from django.shortcuts import redirect, render
 from django.utils.decorators import method_decorator
@@ -15,6 +16,7 @@ from facedetection.forms import FaceDetectionSetupForm
 from horilla.decorators import hx_request_required
 
 from .serializers import *
+from .services import FaceVerificationError, verify_face
 
 
 class FaceDetectionConfigAPIView(APIView):
@@ -82,6 +84,22 @@ class FaceDetectionConfigAPIView(APIView):
 class EmployeeFaceDetectionGetPostAPIView(APIView):
     permission_classes = [IsAuthenticated]
 
+    def _serializer_context(self, request):
+        return {"request": request}
+
+    def _delete_stale_record_if_missing_file(self, record):
+        if not record or not record.image:
+            return record
+
+        try:
+            if not record.image.storage.exists(record.image.name):
+                record.delete()
+                return None
+        except Exception:
+            # If storage access fails, keep the record untouched.
+            return record
+        return record
+
     @method_decorator(csrf_exempt)
     def dispatch(self, *args, **kwargs):
         return super().dispatch(*args, **kwargs)
@@ -105,7 +123,8 @@ class EmployeeFaceDetectionGetPostAPIView(APIView):
         """Get the current user's EmployeeFaceDetection record (their face registration)."""
         try:
             employee = request.user.employee_get
-            return EmployeeFaceDetection.objects.get(employee_id=employee)
+            record = EmployeeFaceDetection.objects.get(employee_id=employee)
+            return self._delete_stale_record_if_missing_file(record)
         except EmployeeFaceDetection.DoesNotExist:
             return None
         except Exception as e:
@@ -118,7 +137,9 @@ class EmployeeFaceDetectionGetPostAPIView(APIView):
                 {"detail": "No face registration found for this employee."},
                 status=status.HTTP_404_NOT_FOUND,
             )
-        serializer = EmployeeFaceDetectionSerializer(employee_facedetection)
+        serializer = EmployeeFaceDetectionSerializer(
+            employee_facedetection, context=self._serializer_context(request)
+        )
         return Response(serializer.data, status=status.HTTP_200_OK)
 
     def post(self, request):
@@ -132,12 +153,22 @@ class EmployeeFaceDetectionGetPostAPIView(APIView):
             # Check if employee already has face detection record
             try:
                 existing_record = EmployeeFaceDetection.objects.get(employee_id=employee_id)
+                existing_record = self._delete_stale_record_if_missing_file(
+                    existing_record
+                )
+                if existing_record is None:
+                    raise EmployeeFaceDetection.DoesNotExist
                 # Update existing record
-                serializer = EmployeeFaceDetectionSerializer(existing_record, data=data)
+                serializer = EmployeeFaceDetectionSerializer(
+                    existing_record,
+                    data=data,
+                    context=self._serializer_context(request),
+                )
                 if serializer.is_valid():
                     serializer.save()
                     return Response(
                         {
+                            "success": True,
                             "message": "Face detection image updated successfully",
                             "data": serializer.data
                         }, 
@@ -146,11 +177,14 @@ class EmployeeFaceDetectionGetPostAPIView(APIView):
                 return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
             except EmployeeFaceDetection.DoesNotExist:
                 # Create new record
-                serializer = EmployeeFaceDetectionSerializer(data=data)
+                serializer = EmployeeFaceDetectionSerializer(
+                    data=data, context=self._serializer_context(request)
+                )
                 if serializer.is_valid():
                     serializer.save()
                     return Response(
                         {
+                            "success": True,
                             "message": "Face detection image uploaded successfully",
                             "data": serializer.data
                         }, 
@@ -166,16 +200,26 @@ class EmployeeFaceDetectionGetPostAPIView(APIView):
             employee_id = request.user.employee_get.id
             try:
                 existing_record = EmployeeFaceDetection.objects.get(employee_id=employee_id)
+                existing_record = self._delete_stale_record_if_missing_file(
+                    existing_record
+                )
+                if existing_record is None:
+                    raise EmployeeFaceDetection.DoesNotExist
                 data = request.data
                 if isinstance(data, QueryDict):
                     data = data.dict()
                 data["employee_id"] = employee_id
                 
-                serializer = EmployeeFaceDetectionSerializer(existing_record, data=data)
+                serializer = EmployeeFaceDetectionSerializer(
+                    existing_record,
+                    data=data,
+                    context=self._serializer_context(request),
+                )
                 if serializer.is_valid():
                     serializer.save()
                     return Response(
                         {
+                            "success": True,
                             "message": "Face detection image updated successfully",
                             "data": serializer.data
                         }, 
@@ -194,6 +238,11 @@ class EmployeeFaceDetectionGetPostAPIView(APIView):
         employee_id = request.user.employee_get.id
         try:
             existing_record = EmployeeFaceDetection.objects.get(employee_id=employee_id)
+            existing_record = self._delete_stale_record_if_missing_file(
+                existing_record
+            )
+            if existing_record is None:
+                raise EmployeeFaceDetection.DoesNotExist
             existing_record.delete()
             return Response(
                 {"message": "Face detection record deleted successfully"},
@@ -204,6 +253,96 @@ class EmployeeFaceDetectionGetPostAPIView(APIView):
                 {"detail": "No face detection record found for this employee."},
                 status=status.HTTP_404_NOT_FOUND,
             )
+
+
+class EmployeeFaceDetectionVerifyAPIView(APIView):
+    permission_classes = [IsAuthenticated]
+    similarity_threshold = float(getattr(settings, "FACE_AUTH_THRESHOLD", 0.82))
+
+    def _delete_stale_record_if_missing_file(self, record):
+        if not record or not record.image:
+            return record
+
+        try:
+            if not record.image.storage.exists(record.image.name):
+                record.delete()
+                return None
+        except Exception:
+            return record
+        return record
+
+    def _get_face_config(self, request):
+        try:
+            return FaceDetection.objects.get(company_id=request.user.employee_get.get_company())
+        except FaceDetection.DoesNotExist:
+            return None
+
+    def post(self, request):
+        config = self._get_face_config(request)
+        if not config or not config.start:
+            return Response(
+                {"verified": False, "message": "Face detection is not enabled."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        try:
+            record = EmployeeFaceDetection.objects.get(
+                employee_id=request.user.employee_get
+            )
+        except EmployeeFaceDetection.DoesNotExist:
+            return Response(
+                {"verified": False, "message": "No enrolled face image found."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        record = self._delete_stale_record_if_missing_file(record)
+        if record is None:
+            return Response(
+                {
+                    "verified": False,
+                    "message": "Stored face image was missing and has been cleared.",
+                },
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        image = request.FILES.get("image")
+        if not image:
+            return Response(
+                {"verified": False, "message": "Capture image is required."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        try:
+            result = verify_face(record.image, image)
+        except FaceVerificationError as exc:
+            return Response(
+                {"verified": False, "message": str(exc)},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        verified = result["verified"]
+        response_status = (
+            status.HTTP_200_OK if verified else status.HTTP_401_UNAUTHORIZED
+        )
+        return Response(
+            {
+                "verified": verified,
+                "message": (
+                    "Face verification successful."
+                    if verified
+                    else "Face verification failed."
+                ),
+                "score": result["score"],
+                "threshold": result.get("threshold", self.similarity_threshold),
+                "provider": result["provider"],
+                "distance": result.get("distance"),
+                "model_name": result.get("model_name"),
+                "detector_backend": result.get("detector_backend"),
+                "hash_similarity": result.get("hash_similarity"),
+                "pixel_similarity": result.get("pixel_similarity"),
+            },
+            status=response_status,
+        )
 
 
 def get_company(request):
