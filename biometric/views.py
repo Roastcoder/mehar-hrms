@@ -1283,25 +1283,19 @@ def biometric_device_employees(request, device_id, **kwargs):
         try:
             if device.machine_type == "zk":
                 employee_add_form = EmployeeBiometricAddForm()
-                use_direct = request.GET.get("source") == "direct"
-                if use_direct:
-                    employees = zk_employees_fetch(device)
+                employees = zk_employees_mapped_fallback(device)
+                if _is_recent_adms_seen(device):
+                    messages.info(
+                        request,
+                        _("ADMS mode active: showing mapped employees from Horilla."),
+                    )
                 else:
-                    employees = zk_employees_mapped_fallback(device)
-                    if _is_recent_adms_seen(device):
-                        messages.info(
-                            request,
-                            _(
-                                "ADMS mode active: showing mapped employees from Horilla."
-                            ),
-                        )
-                    else:
-                        messages.warning(
-                            request,
-                            _(
-                                "No recent ADMS callback detected yet. Showing mapped employees from Horilla."
-                            ),
-                        )
+                    messages.warning(
+                        request,
+                        _(
+                            "No recent ADMS callback detected yet. Showing mapped employees from Horilla."
+                        ),
+                    )
                 employees = paginator_qry(employees, request.GET.get("page"))
                 context = {
                     "employees": employees,
@@ -1381,19 +1375,7 @@ def search_employee_device(request):
     device = BiometricDevices.objects.get(id=device_id)
     search = request.GET.get("search")
     if device.machine_type == "zk":
-        use_direct = request.GET.get("source") == "direct"
-        if use_direct:
-            employees = zk_employees_fetch(device)
-            if search:
-                search_employees = BiometricEmployees.objects.filter(
-                    employee_id__employee_first_name__icontains=search
-                )
-                search_uids = search_employees.values_list("uid", flat=True)
-                employees = [
-                    employee for employee in employees if employee.uid in search_uids
-                ]
-        else:
-            employees = zk_employees_mapped_fallback(device, search=search)
+        employees = zk_employees_mapped_fallback(device, search=search)
         employees = paginator_qry(employees, request.GET.get("page"))
         template = "biometric/list_employees_biometric.html"
         context = {
@@ -1462,24 +1444,18 @@ def delete_biometric_user(request, uid, device_id):
                       biometric device.
     """
     device = BiometricDevices.objects.get(id=device_id)
-    zk_device = ZK(
-        device.machine_ip,
-        port=device.port,
-        timeout=5,
-        password=int(device.zk_password),
-        force_udp=False,
-        ommit_ping=False,
-    )
-    conn = zk_device.connect()
-    conn.delete_user(uid=uid)
-    employee_bio = BiometricEmployees.objects.filter(uid=uid).first()
-    employee_bio.delete()
-    messages.success(
-        request,
-        _("{} successfully removed from the biometric device.").format(
-            employee_bio.employee_id
-        ),
-    )
+    employee_bio = BiometricEmployees.objects.filter(uid=uid, device_id=device).first()
+    if employee_bio:
+        employee_name = employee_bio.employee_id
+        employee_bio.delete()
+        messages.success(
+            request,
+            _("{} successfully removed from Horilla biometric mapping.").format(
+                employee_name
+            ),
+        )
+    else:
+        messages.warning(request, _("Mapped biometric user not found."))
     redirect_url = f"/biometric/biometric-device-employees/{device_id}/"
     return redirect(redirect_url)
 
@@ -1679,33 +1655,24 @@ def bio_users_bulk_delete(request):
         JsonResponse: A JSON response indicating the success of the bulk delete operation.
 
     """
-    conn = None
     json_ids = request.POST["ids"]
     device_id = request.POST["deviceId"]
     ids = json.loads(json_ids)
     device = BiometricDevices.objects.get(id=device_id)
     try:
-        zk_device = ZK(
-            device.machine_ip,
-            port=device.port,
-            timeout=5,
-            password=int(device.zk_password),
-            force_udp=False,
-            ommit_ping=False,
-        )
-        conn = zk_device.connect()
         for user_id in ids:
-            user_id = int(user_id)
-            conn.delete_user(user_id=user_id)
-            employee_bio = BiometricEmployees.objects.filter(user_id=user_id).first()
-            employee_bio.delete()
-            conn.refresh_data()
-            messages.success(
-                request,
-                _("{} successfully removed from the biometric device.").format(
-                    employee_bio.employee_id
-                ),
-            )
+            employee_bio = BiometricEmployees.objects.filter(
+                user_id=str(user_id), device_id=device
+            ).first()
+            if employee_bio:
+                employee_name = employee_bio.employee_id
+                employee_bio.delete()
+                messages.success(
+                    request,
+                    _("{} successfully removed from Horilla biometric mapping.").format(
+                        employee_name
+                    ),
+                )
     except Exception as error:
         logger.error("An error occurred in delete_biometric_user: %s", error)
     return JsonResponse({"messages": "Success"})
@@ -1780,22 +1747,27 @@ def add_biometric_user(request, device_id):
     )
     if request.method == "POST":
         device = BiometricDevices.objects.get(id=device_id)
+        conn = None
         try:
             if device.machine_type == "zk":
-                zk_device = ZK(
-                    device.machine_ip,
-                    port=device.port,
-                    timeout=5,
-                    password=int(device.zk_password),
-                    force_udp=False,
-                    ommit_ping=False,
-                )
-                conn = zk_device.connect()
-                conn.enable_device()
-                existing_uids = [user.uid for user in conn.get_users()]
-                existing_user_ids = [user.user_id for user in conn.get_users()]
+                existing_uids = []
+                existing_user_ids = []
                 uid = 1
                 user_id = 1000
+
+                # ADMS mode: keep mapping local in Horilla without direct device socket call.
+                existing_uids = list(
+                    BiometricEmployees.objects.filter(device_id=device).values_list(
+                        "uid", flat=True
+                    )
+                )
+                existing_uids = [uid for uid in existing_uids if uid is not None]
+                existing_user_ids = list(
+                    BiometricEmployees.objects.filter(device_id=device).values_list(
+                        "user_id", flat=True
+                    )
+                )
+
                 employee_ids = request.POST.getlist("employee_ids")
                 for obj_id in employee_ids:
                     employee = Employee.objects.get(id=obj_id)
@@ -1803,26 +1775,24 @@ def add_biometric_user(request, device_id):
                         employee_id=employee, device_id=device
                     ).first()
                     if existing_biometric_employee is None:
-                        while uid in existing_uids or user_id in existing_user_ids:
-                            user_id = int(user_id)
+                        preferred_user_id = (
+                            str(employee.badge_id).strip() if employee.badge_id else ""
+                        )
+                        while uid in existing_uids or str(user_id) in existing_user_ids:
                             uid += 1
                             user_id += 1
                         existing_uids.append(uid)
-                        existing_user_ids.append(user_id)
-                        employee_name = employee.get_full_name()
-                        conn.set_user(
-                            uid=uid,
-                            name=employee_name,
-                            password="",
-                            group_id="",
-                            user_id=str(user_id),
-                            card=0,
+                        final_user_id = (
+                            preferred_user_id
+                            if preferred_user_id and preferred_user_id not in existing_user_ids
+                            else str(user_id)
                         )
+                        existing_user_ids.append(final_user_id)
                         # The ZK Biometric user ID must be a character value
                         # that can be converted to an integer.
                         BiometricEmployees.objects.create(
                             uid=uid,
-                            user_id=str(user_id),
+                            user_id=final_user_id,
                             employee_id=employee,
                             device_id=device,
                         )
@@ -1837,6 +1807,12 @@ def add_biometric_user(request, device_id):
                             request,
                             _("{} already added to biometric device").format(employee),
                         )
+                messages.info(
+                    request,
+                    _(
+                        "ADMS mode: users were mapped in Horilla. Enroll fingerprint on the device using this user ID/PIN."
+                    ),
+                )
             else:
                 cosec = COSECBiometric(
                     device.machine_ip,
@@ -1878,9 +1854,24 @@ def add_biometric_user(request, device_id):
                                 device_id=device,
                             )
         except Exception as error:
+            logger.error("An error occurred while adding biometric user: %s", error)
             if device.machine_type == "zk":
-                conn.disable_device()
-                logger.error("An error occurred while adding biometric user: %s", error)
+                messages.warning(
+                    request,
+                    _(
+                        "Unable to add biometric mapping. Please check employee badge ID/PIN configuration."
+                    ),
+                )
+        finally:
+            if conn:
+                try:
+                    conn.disable_device()
+                except Exception:
+                    pass
+                try:
+                    conn.disconnect()
+                except Exception:
+                    pass
         return HttpResponse("<script>window.location.reload()</script>")
     return render(
         request,
