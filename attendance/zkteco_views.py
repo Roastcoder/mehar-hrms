@@ -4,6 +4,7 @@ ZKTeco ADMS push endpoint handlers.
 
 import logging
 from datetime import datetime
+import hashlib
 from urllib.parse import parse_qs
 
 from django.http import HttpResponse
@@ -40,6 +41,16 @@ def _parse_datetime(timestamp_str):
     return None
 
 
+def _sn_cache_key(sn: str) -> str:
+    """
+    Cache backend keys must be short and contain safe characters.
+    """
+    if not sn:
+        return ""
+    digest = hashlib.md5(sn.encode("utf-8", errors="ignore")).hexdigest()
+    return f"{ADMS_LAST_SEEN_SN_PREFIX}{digest}"
+
+
 def _parse_adms_lines(raw_text, query_string):
     """
     Parse ADMS key/value records and return normalized dictionaries.
@@ -53,15 +64,18 @@ def _parse_adms_lines(raw_text, query_string):
     for line in lines:
         if "=" in line and "&" in line:
             parsed = parse_qs(line, keep_blank_values=True)
-            records.append(
-                {
-                    "sn": _first(parsed.get("SN"), ""),
-                    "table": _first(parsed.get("table"), ""),
-                    "pin": _first(parsed.get("PIN"), ""),
-                    "time": _first(parsed.get("time"), ""),
-                    "status": _first(parsed.get("status"), ""),
-                }
-            )
+            table = _first(parsed.get("table"), "")
+            # Only ATTLOG is attendance. Ignore device ops/user/fp/etc.
+            if str(table).upper() == "ATTLOG":
+                records.append(
+                    {
+                        "sn": _first(parsed.get("SN"), ""),
+                        "table": table,
+                        "pin": _first(parsed.get("PIN"), ""),
+                        "time": _first(parsed.get("time"), ""),
+                        "status": _first(parsed.get("status"), ""),
+                    }
+                )
             continue
 
         # Backward compatibility for tab-separated ATTLOG payloads
@@ -90,6 +104,10 @@ def _parse_adms_lines(raw_text, query_string):
                 pin = parts[0].strip()
                 time_str = parts[1].strip()
                 status = parts[2].strip() if len(parts) > 2 else ""
+
+            # Only treat as attendance if the second column is a valid datetime.
+            if not _parse_datetime(time_str):
+                continue
 
             records.append(
                 {
@@ -306,7 +324,7 @@ def iclock_cdata(request):
             device_sn = (record.get("sn") or request.GET.get("SN") or "").strip()
             if device_sn:
                 cache.set(
-                    f"{ADMS_LAST_SEEN_SN_PREFIX}{device_sn}",
+                    _sn_cache_key(device_sn),
                     now_iso,
                     timeout=60 * 60 * 24,
                 )
@@ -361,7 +379,7 @@ def iclock_ping(request):
     cache.set(ADMS_LAST_SEEN_ANY_KEY, now_iso, timeout=60 * 60 * 24)
     sn = request.GET.get("SN", "").strip()
     if sn:
-        cache.set(f"{ADMS_LAST_SEEN_SN_PREFIX}{sn}", now_iso, timeout=60 * 60 * 24)
+        cache.set(_sn_cache_key(sn), now_iso, timeout=60 * 60 * 24)
     return HttpResponse("OK", status=200, content_type="text/plain")
 
 
@@ -380,5 +398,5 @@ def iclock_getrequest(request):
     cache.set(ADMS_LAST_SEEN_ANY_KEY, now_iso, timeout=60 * 60 * 24)
     sn = request.GET.get("SN", "").strip()
     if sn:
-        cache.set(f"{ADMS_LAST_SEEN_SN_PREFIX}{sn}", now_iso, timeout=60 * 60 * 24)
+        cache.set(_sn_cache_key(sn), now_iso, timeout=60 * 60 * 24)
     return HttpResponse("OK", status=200, content_type="text/plain")
