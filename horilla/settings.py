@@ -256,3 +256,44 @@ if not DEBUG:
     SESSION_COOKIE_SECURE = True
     CSRF_COOKIE_SECURE = True
     SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
+# Biometric Logging
+LOGGING = {
+    "version": 1,
+    "disable_existing_loggers": False,
+    "formatters": {
+        "verbose": {
+            "format": "{levelname} {asctime} {module} {message}",
+            "style": "{",
+        },
+    },
+    "handlers": {
+        "console": {
+            "class": "logging.StreamHandler",
+            "formatter": "verbose",
+        },
+        "zkteco_file": {
+            "level": "INFO",
+            "class": "logging.FileHandler",
+            "filename": os.path.join(BASE_DIR, "logs/zkteco.log"),
+            "formatter": "verbose",
+        },
+    },
+    "loggers": {
+        "attendance.adms": {
+            "handlers": ["console", "zkteco_file"],
+            "level": "INFO",
+            "propagate": False,
+        },
+    },
+}
+
+# Ensure logs directory exists
+LOGS_DIR = os.path.join(BASE_DIR, "logs")
+if not os.path.exists(LOGS_DIR):
+    os.makedirs(LOGS_DIR)
+
+# ADMS Protocol Handling
+DATA_UPLOAD_MAX_MEMORY_SIZE = 10485760  # 10MB to handle large log pushes
+CSRF_TRUSTED_ORIGINS += [
+    "https://hrms.meharadvisory.cloud",
+]

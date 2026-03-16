@@ -19,10 +19,13 @@ from base.models import AttendanceAllowedIP
 
 from .views import views
 from .zkteco_views import iclock_cdata
+from . import adms_views
 
 urlpatterns = [
     # ZKTeco Biometric Device Integration
-    path("iclock/cdata", iclock_cdata, name="iclock-cdata"),
+    path("iclock/cdata", adms_views.iclock_cdata, name="iclock-cdata"),
+    path("iclock/getrequest", adms_views.iclock_getrequest, name="iclock-getrequest"),
+    path("iclock/ping", adms_views.iclock_ping, name="iclock-ping"),
     
     path(
         "profile-attendance-tab",

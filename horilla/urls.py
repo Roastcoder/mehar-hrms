@@ -20,7 +20,7 @@ from django.http import JsonResponse
 from django.urls import include, path, re_path
 
 import notifications.urls
-from attendance.zkteco_views import iclock_cdata, iclock_getrequest, iclock_ping
+from attendance.adms_views import iclock_cdata, iclock_getrequest, iclock_ping
 from base.signup_view import signup
 
 from . import settings
