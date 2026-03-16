@@ -2,11 +2,12 @@
 """
 ZKTeco ADMS (iClock) Push Protocol Handlers for Horilla HRMS.
 Handles handshake, data push (URL-encoded + tab-separated), and command polling.
+Bypasses decorated clock_in/clock_out and calls internal functions directly.
 """
 
 import sys
 import os
-from datetime import datetime
+from datetime import date, datetime, timedelta
 from urllib.parse import parse_qs
 
 from django.http import HttpResponse
@@ -15,8 +16,16 @@ from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_http_methods
 
 from attendance.models import Attendance, AttendanceActivity
-from attendance.views.clock_in_out import clock_in, clock_out
-from attendance.methods.utils import Request
+from attendance.views.clock_in_out import (
+    clock_in_attendance_and_activity,
+    clock_out_attendance_and_activity,
+)
+from attendance.methods.utils import (
+    format_time,
+    shift_schedule_today,
+    strtime_seconds,
+)
+from base.models import EmployeeShiftDay
 from employee.models import Employee
 
 # Direct file + stdout logging (reliable under Gunicorn)
@@ -79,7 +88,7 @@ def _is_out_status(status):
 def _parse_adms_lines(raw_text, query_string=""):
     """
     Parse ADMS records from POST body. Handles:
-    1. URL-encoded lines: table=ATTLOG&PIN=1&time=2026-03-16 15:00:00&status=0
+    1. URL-encoded: table=ATTLOG&PIN=1&time=2026-03-16 15:00:00&status=0
     2. Tab-separated: ATTLOG\t1\t2026-03-16 15:00:00\t0
     3. Plain tab: 1\t2026-03-16 15:00:00\t0
     """
@@ -90,9 +99,7 @@ def _parse_adms_lines(raw_text, query_string=""):
         lines = [query_string]
 
     for line in lines:
-        _log(f"  Parsing line: {repr(line)}")
-
-        # URL-encoded format: table=ATTLOG&PIN=1&time=...
+        # URL-encoded format
         if "=" in line and "&" in line:
             parsed = parse_qs(line, keep_blank_values=True)
             table = _qs_get(parsed, ["table", "TABLE"], "")
@@ -156,7 +163,11 @@ def _parse_adms_lines(raw_text, query_string=""):
 
 
 def _process_record(record, device_sn):
-    """Process a single parsed attendance record."""
+    """
+    Process a single attendance record by directly calling Horilla's internal
+    clock_in_attendance_and_activity / clock_out_attendance_and_activity.
+    This bypasses the @login_required and @hx_request_required decorators.
+    """
     pin = record["pin"]
     time_str = record["time"]
     status = record.get("status", "0")
@@ -196,58 +207,107 @@ def _process_record(record, device_sn):
         return False
 
     try:
-        if employee.employee_user_id:
-            biometric_request = Request(
-                user=employee.employee_user_id,
-                date=attendance_date,
-                time=attendance_time,
-                datetime=attendance_dt,
+        # Get employee work info for shift details
+        work_info = getattr(employee, "employee_work_info", None)
+        shift = work_info.shift_id if work_info else None
+
+        # Determine shift day and schedule
+        day_name = attendance_date.strftime("%A").lower()
+        try:
+            day = EmployeeShiftDay.objects.get(day=day_name)
+        except EmployeeShiftDay.DoesNotExist:
+            _log(f"  No shift day config for '{day_name}', creating attendance directly")
+            day = None
+
+        minimum_hour = "00:00"
+        start_time_sec = 0
+        end_time_sec = 0
+
+        if shift and day:
+            minimum_hour, start_time_sec, end_time_sec = shift_schedule_today(
+                day=day, shift=shift
             )
-            if is_out:
-                clock_out(biometric_request)
-            else:
-                clock_in(biometric_request)
-        else:
-            # Fallback for employees without a linked User
-            attendance, _ = Attendance.objects.get_or_create(
-                employee_id=employee,
-                attendance_date=attendance_date,
-                defaults={
-                    "attendance_clock_in_date": attendance_date,
-                    "attendance_clock_in": attendance_time,
-                    "shift_id": employee.get_shift(),
-                    "work_type_id": employee.get_work_type(),
-                },
-            )
-            if not is_out:
-                if attendance.attendance_clock_in is None or attendance.attendance_clock_in > attendance_time:
-                    attendance.attendance_clock_in = attendance_time
-                    attendance.attendance_clock_in_date = attendance_date
-                    attendance.save(update_fields=["attendance_clock_in", "attendance_clock_in_date"])
-                AttendanceActivity.objects.create(
-                    employee_id=employee,
+            # Handle night shift
+            now_sec = strtime_seconds(attendance_time.strftime("%H:%M"))
+            mid_day_sec = strtime_seconds("12:00")
+            if start_time_sec > end_time_sec and mid_day_sec > now_sec:
+                # Night shift – attendance belongs to yesterday
+                date_yesterday = attendance_date - timedelta(days=1)
+                day_yesterday_name = date_yesterday.strftime("%A").lower()
+                try:
+                    day = EmployeeShiftDay.objects.get(day=day_yesterday_name)
+                    minimum_hour, start_time_sec, end_time_sec = shift_schedule_today(
+                        day=day, shift=shift
+                    )
+                    attendance_date = date_yesterday
+                except EmployeeShiftDay.DoesNotExist:
+                    pass
+
+        if not is_out:
+            # Clock IN – use Horilla's internal function
+            if shift and day:
+                now_str = attendance_time.strftime("%H:%M")
+                clock_in_attendance_and_activity(
+                    employee=employee,
+                    date_today=attendance_dt.date(),
                     attendance_date=attendance_date,
-                    clock_in_date=attendance_date,
-                    clock_in=attendance_time,
+                    day=day,
+                    now=now_str,
+                    shift=shift,
+                    minimum_hour=minimum_hour,
+                    start_time=start_time_sec,
+                    end_time=end_time_sec,
                     in_datetime=attendance_dt,
                 )
             else:
+                # No shift configured – create records directly
+                attendance, _ = Attendance.objects.get_or_create(
+                    employee_id=employee,
+                    attendance_date=attendance_date,
+                    defaults={
+                        "attendance_clock_in_date": attendance_date,
+                        "attendance_clock_in": attendance_time,
+                        "minimum_hour": "00:00",
+                    },
+                )
+                AttendanceActivity.objects.create(
+                    employee_id=employee,
+                    attendance_date=attendance_date,
+                    clock_in_date=attendance_dt.date(),
+                    clock_in=attendance_dt,
+                    in_datetime=attendance_dt,
+                )
+        else:
+            # Clock OUT – use Horilla's internal function
+            now_str = attendance_time.strftime("%H:%M")
+            result = clock_out_attendance_and_activity(
+                employee=employee,
+                date_today=attendance_dt.date(),
+                now=now_str,
+                out_datetime=attendance_dt,
+            )
+            if not result:
+                # No open activity to clock out – create one with clock_out set
+                _log(f"  No open clock-in found for clock-out. Creating standalone record.")
+                attendance, _ = Attendance.objects.get_or_create(
+                    employee_id=employee,
+                    attendance_date=attendance_date,
+                    defaults={
+                        "attendance_clock_in_date": attendance_date,
+                        "attendance_clock_in": attendance_time,
+                        "minimum_hour": "00:00",
+                    },
+                )
                 attendance.attendance_clock_out = attendance_time
-                attendance.attendance_clock_out_date = attendance_date
+                attendance.attendance_clock_out_date = attendance_dt.date()
                 attendance.save(update_fields=["attendance_clock_out", "attendance_clock_out_date"])
-                open_activity = AttendanceActivity.objects.filter(
-                    employee_id=employee, attendance_date=attendance_date, clock_out__isnull=True,
-                ).order_by("-in_datetime").first()
-                if open_activity:
-                    open_activity.clock_out = attendance_time
-                    open_activity.clock_out_date = attendance_date
-                    open_activity.out_datetime = attendance_dt
-                    open_activity.save(update_fields=["clock_out", "clock_out_date", "out_datetime"])
 
         _log(f"  OK: PIN={pin} {'OUT' if is_out else 'IN'} Time={time_str} Employee={employee}")
         return True
     except Exception as e:
+        import traceback
         _log(f"  ERROR: PIN={pin} - {str(e)}")
+        _log(f"  TRACEBACK: {traceback.format_exc()}")
         return False
 
 
