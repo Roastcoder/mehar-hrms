@@ -1141,6 +1141,16 @@ def zk_employees_mapped_fallback(device, search=None):
     return employees
 
 
+def _is_recent_adms_seen(device):
+    """
+    Check whether ADMS callbacks were received recently for this device (or globally).
+    """
+    possible_sn = (device.name or "").strip()
+    if possible_sn and cache.get(f"{ADMS_LAST_SEEN_SN_PREFIX}{possible_sn}"):
+        return True
+    return bool(cache.get(ADMS_LAST_SEEN_ANY_KEY))
+
+
 def cosec_employee_fetch(device_id):
     """
     Fetch employee data from the COSEC biometric device associated with the specified device ID.
@@ -1273,16 +1283,25 @@ def biometric_device_employees(request, device_id, **kwargs):
         try:
             if device.machine_type == "zk":
                 employee_add_form = EmployeeBiometricAddForm()
-                try:
+                use_direct = request.GET.get("source") == "direct"
+                if use_direct:
                     employees = zk_employees_fetch(device)
-                except Exception:
+                else:
                     employees = zk_employees_mapped_fallback(device)
-                    messages.warning(
-                        request,
-                        _(
-                            "Direct ZKTeco connection is unavailable. Showing mapped employees from Horilla (ADMS mode)."
-                        ),
-                    )
+                    if _is_recent_adms_seen(device):
+                        messages.info(
+                            request,
+                            _(
+                                "ADMS mode active: showing mapped employees from Horilla."
+                            ),
+                        )
+                    else:
+                        messages.warning(
+                            request,
+                            _(
+                                "No recent ADMS callback detected yet. Showing mapped employees from Horilla."
+                            ),
+                        )
                 employees = paginator_qry(employees, request.GET.get("page"))
                 context = {
                     "employees": employees,
@@ -1362,7 +1381,8 @@ def search_employee_device(request):
     device = BiometricDevices.objects.get(id=device_id)
     search = request.GET.get("search")
     if device.machine_type == "zk":
-        try:
+        use_direct = request.GET.get("source") == "direct"
+        if use_direct:
             employees = zk_employees_fetch(device)
             if search:
                 search_employees = BiometricEmployees.objects.filter(
@@ -1372,7 +1392,7 @@ def search_employee_device(request):
                 employees = [
                     employee for employee in employees if employee.uid in search_uids
                 ]
-        except Exception:
+        else:
             employees = zk_employees_mapped_fallback(device, search=search)
         employees = paginator_qry(employees, request.GET.get("page"))
         template = "biometric/list_employees_biometric.html"
