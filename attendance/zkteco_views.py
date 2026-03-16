@@ -1,127 +1,223 @@
 """
-ZKTeco Biometric Device Integration
-Handles ADMS push mode for attendance data
+ZKTeco ADMS push endpoint handlers.
 """
 
 import logging
 from datetime import datetime
+from urllib.parse import parse_qs
+
 from django.http import HttpResponse
+from django.utils import timezone
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_http_methods
-from django.db import transaction
+
+from attendance.methods.utils import Request
 from attendance.models import Attendance, AttendanceActivity
+from attendance.views.clock_in_out import clock_in
 from employee.models import Employee
 
 logger = logging.getLogger(__name__)
+
+
+def _first(values, default=""):
+    if not values:
+        return default
+    return values[0]
+
+
+def _parse_datetime(timestamp_str):
+    for fmt in ("%Y-%m-%d %H:%M:%S", "%Y/%m/%d %H:%M:%S"):
+        try:
+            dt = datetime.strptime(timestamp_str, fmt)
+            if timezone.is_naive(dt):
+                return timezone.make_aware(dt, timezone.get_current_timezone())
+            return dt
+        except ValueError:
+            continue
+    return None
+
+
+def _parse_adms_lines(raw_text, query_string):
+    """
+    Parse ADMS key/value records and return normalized dictionaries.
+    """
+    records = []
+    lines = [line.strip() for line in raw_text.splitlines() if line.strip()] if raw_text else []
+
+    if not lines and query_string:
+        lines = [query_string]
+
+    for line in lines:
+        # Backward compatibility for tab-separated ATTLOG payloads
+        if line.startswith("ATTLOG\t"):
+            parts = line.split("\t")
+            if len(parts) >= 4:
+                records.append(
+                    {
+                        "sn": "",
+                        "table": "ATTLOG",
+                        "pin": parts[1].strip(),
+                        "time": parts[2].strip(),
+                        "status": parts[3].strip(),
+                    }
+                )
+            continue
+
+        parsed = parse_qs(line, keep_blank_values=True)
+        records.append(
+            {
+                "sn": _first(parsed.get("SN"), ""),
+                "table": _first(parsed.get("table"), ""),
+                "pin": _first(parsed.get("PIN"), ""),
+                "time": _first(parsed.get("time"), ""),
+                "status": _first(parsed.get("status"), ""),
+            }
+        )
+
+    return records
+
+
+def _create_or_update_attendance(employee, attendance_dt, device_sn, status):
+    """
+    Mark biometric check-in using Horilla clock_in flow and dedupe by exact timestamp.
+    """
+    attendance_date = attendance_dt.date()
+    attendance_time = attendance_dt.time()
+
+    duplicate_exists = AttendanceActivity.objects.filter(
+        employee_id=employee,
+        in_datetime=attendance_dt,
+    ).exists() or AttendanceActivity.objects.filter(
+        employee_id=employee,
+        attendance_date=attendance_date,
+        clock_in_date=attendance_date,
+        clock_in=attendance_time,
+    ).exists()
+
+    if duplicate_exists:
+        logger.info(
+            "Duplicate biometric log ignored. device_sn=%s pin=%s time=%s status=%s",
+            device_sn,
+            employee.badge_id,
+            attendance_dt.isoformat(),
+            status,
+        )
+        return False
+
+    # Source is biometric by using the biometric flow (request.datetime is consumed by clock_in)
+    if employee.employee_user_id:
+        biometric_request = Request(
+            user=employee.employee_user_id,
+            date=attendance_date,
+            time=attendance_time,
+            datetime=attendance_dt,
+        )
+        clock_in(biometric_request)
+    else:
+        attendance, _ = Attendance.objects.get_or_create(
+            employee_id=employee,
+            attendance_date=attendance_date,
+            defaults={
+                "attendance_clock_in_date": attendance_date,
+                "attendance_clock_in": attendance_time,
+                "shift_id": employee.get_shift(),
+                "work_type_id": employee.get_work_type(),
+            },
+        )
+        if (
+            attendance.attendance_clock_in is None
+            or attendance.attendance_clock_in > attendance_time
+        ):
+            attendance.attendance_clock_in = attendance_time
+            attendance.attendance_clock_in_date = attendance_date
+            attendance.shift_id = attendance.shift_id or employee.get_shift()
+            attendance.work_type_id = attendance.work_type_id or employee.get_work_type()
+            attendance.save(
+                update_fields=[
+                    "attendance_clock_in",
+                    "attendance_clock_in_date",
+                    "shift_id",
+                    "work_type_id",
+                ]
+            )
+
+        AttendanceActivity.objects.create(
+            employee_id=employee,
+            attendance_date=attendance_date,
+            clock_in_date=attendance_date,
+            clock_in=attendance_time,
+            in_datetime=attendance_dt,
+        )
+
+    logger.info(
+        "Biometric attendance accepted. source=biometric device_sn=%s pin=%s time=%s status=%s",
+        device_sn,
+        employee.badge_id,
+        attendance_dt.isoformat(),
+        status,
+    )
+    return True
 
 
 @csrf_exempt
 @require_http_methods(["POST", "GET"])
 def iclock_cdata(request):
     """
-    Handle ZKTeco device push requests
-    Endpoint: /iclock/cdata
+    Handle ZKTeco ADMS push protocol endpoint `/iclock/cdata`.
     """
-    try:
-        # Get device serial number
-        sn = request.GET.get('SN', '')
-        
-        if not sn:
-            logger.warning("Request received without device serial number")
-            return HttpResponse("OK", content_type="text/plain")
-        
-        # Get attendance data from POST body
-        data = request.body.decode('utf-8')
-        
-        if not data:
-            logger.info(f"Empty data from device {sn}")
-            return HttpResponse("OK", content_type="text/plain")
-        
-        # Parse ATTLOG data
-        lines = data.strip().split('\n')
-        
-        for line in lines:
-            if line.startswith('ATTLOG'):
-                process_attlog(line, sn)
-        
-        logger.info(f"Successfully processed data from device {sn}")
-        return HttpResponse("OK", content_type="text/plain")
-        
-    except Exception as e:
-        logger.error(f"Error processing ZKTeco data: {str(e)}", exc_info=True)
-        return HttpResponse("OK", content_type="text/plain")
+    raw_body = request.body.decode("utf-8", errors="ignore").strip()
+    query_string = request.META.get("QUERY_STRING", "")
+    remote_ip = request.META.get("HTTP_X_FORWARDED_FOR", request.META.get("REMOTE_ADDR", ""))
 
+    logger.info(
+        "ZKTeco /iclock/cdata request: method=%s ip=%s query=%s body=%s",
+        request.method,
+        remote_ip,
+        query_string,
+        raw_body[:2000],
+    )
 
-def process_attlog(line, device_sn):
-    """
-    Process ATTLOG line from ZKTeco device
-    Format: ATTLOG\tPIN\ttime\tstatus\tverify\tworkcode\treserved
-    Example: ATTLOG\t1\t2024-01-15 09:30:00\t0\t0\t0\t0
-    """
     try:
-        parts = line.split('\t')
-        
-        if len(parts) < 3:
-            logger.warning(f"Invalid ATTLOG format: {line}")
-            return
-        
-        pin = parts[1].strip()
-        timestamp_str = parts[2].strip()
-        
-        # Parse timestamp
-        try:
-            timestamp = datetime.strptime(timestamp_str, '%Y-%m-%d %H:%M:%S')
-        except ValueError:
-            logger.error(f"Invalid timestamp format: {timestamp_str}")
-            return
-        
-        # Find employee by badge_id (PIN)
-        try:
-            employee = Employee.objects.get(badge_id=pin)
-        except Employee.DoesNotExist:
-            logger.warning(f"Employee not found for PIN: {pin}")
-            return
-        
-        attendance_date = timestamp.date()
-        check_in_time = timestamp.time()
-        
-        # Check for duplicate entry
-        existing_activity = AttendanceActivity.objects.filter(
-            employee_id=employee,
-            attendance_date=attendance_date,
-            clock_in_date=attendance_date,
-            clock_in=check_in_time
-        ).first()
-        
-        if existing_activity:
-            logger.info(f"Duplicate entry ignored for {employee} at {timestamp}")
-            return
-        
-        # Create or update attendance
-        with transaction.atomic():
-            attendance, created = Attendance.objects.get_or_create(
-                employee_id=employee,
-                attendance_date=attendance_date,
-                defaults={
-                    'attendance_clock_in_date': attendance_date,
-                    'attendance_clock_in': check_in_time,
-                    'shift_id': employee.get_shift(),
-                    'work_type_id': employee.get_work_type(),
-                }
-            )
-            
-            # Create attendance activity
-            AttendanceActivity.objects.create(
-                employee_id=employee,
-                attendance_date=attendance_date,
-                clock_in_date=attendance_date,
-                clock_in=check_in_time,
-                in_datetime=timestamp
-            )
-            
-            logger.info(
-                f"Attendance recorded: {employee} - {timestamp} - Device: {device_sn}"
-            )
-            
-    except Exception as e:
-        logger.error(f"Error processing ATTLOG: {str(e)}", exc_info=True)
+        records = _parse_adms_lines(raw_body, query_string)
+        processed = 0
+
+        for record in records:
+            table = (record.get("table") or "").upper()
+            if table and table != "ATTLOG":
+                continue
+
+            device_sn = (record.get("sn") or request.GET.get("SN") or "").strip()
+            pin = (record.get("pin") or "").strip()
+            time_str = (record.get("time") or "").strip()
+            status = (record.get("status") or "").strip()
+
+            if not pin or not time_str:
+                continue
+
+            attendance_dt = _parse_datetime(time_str)
+            if not attendance_dt:
+                logger.warning(
+                    "Invalid attendance timestamp ignored. device_sn=%s pin=%s time=%s",
+                    device_sn,
+                    pin,
+                    time_str,
+                )
+                continue
+
+            employee = Employee.objects.filter(badge_id=pin).first()
+            if not employee:
+                logger.warning(
+                    "No employee found for biometric PIN. device_sn=%s pin=%s",
+                    device_sn,
+                    pin,
+                )
+                continue
+
+            if _create_or_update_attendance(employee, attendance_dt, device_sn, status):
+                processed += 1
+
+        logger.info("ZKTeco /iclock/cdata completed. processed=%s", processed)
+    except Exception:
+        logger.exception("Unhandled error in ZKTeco /iclock/cdata")
+
+    return HttpResponse("OK", status=200, content_type="text/plain")
