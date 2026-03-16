@@ -11,13 +11,14 @@ class FaceDetectionSerializer(serializers.ModelSerializer):
 
 
 class EmployeeFaceDetectionSerializer(serializers.ModelSerializer):
-    image = serializers.SerializerMethodField()
+    image = serializers.ImageField(required=False, allow_null=True)
+    image_url = serializers.SerializerMethodField()
 
     class Meta:
         model = EmployeeFaceDetection
         fields = "__all__"
 
-    def get_image(self, obj):
+    def get_image_url(self, obj):
         if not obj.image:
             return None
         request = self.context.get("request")
