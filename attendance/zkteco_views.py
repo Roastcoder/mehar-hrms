@@ -14,7 +14,7 @@ from django.views.decorators.http import require_http_methods
 
 from attendance.methods.utils import Request
 from attendance.models import Attendance, AttendanceActivity
-from attendance.views.clock_in_out import clock_in
+from attendance.views.clock_in_out import clock_in, clock_out
 from employee.models import Employee
 
 logger = logging.getLogger(__name__)
@@ -51,6 +51,19 @@ def _parse_adms_lines(raw_text, query_string):
         lines = [query_string]
 
     for line in lines:
+        if "=" in line and "&" in line:
+            parsed = parse_qs(line, keep_blank_values=True)
+            records.append(
+                {
+                    "sn": _first(parsed.get("SN"), ""),
+                    "table": _first(parsed.get("table"), ""),
+                    "pin": _first(parsed.get("PIN"), ""),
+                    "time": _first(parsed.get("time"), ""),
+                    "status": _first(parsed.get("status"), ""),
+                }
+            )
+            continue
+
         # Backward compatibility for tab-separated ATTLOG payloads
         if line.startswith("ATTLOG\t"):
             parts = line.split("\t")
@@ -66,18 +79,62 @@ def _parse_adms_lines(raw_text, query_string):
                 )
             continue
 
-        parsed = parse_qs(line, keep_blank_values=True)
-        records.append(
-            {
-                "sn": _first(parsed.get("SN"), ""),
-                "table": _first(parsed.get("table"), ""),
-                "pin": _first(parsed.get("PIN"), ""),
-                "time": _first(parsed.get("time"), ""),
-                "status": _first(parsed.get("status"), ""),
-            }
-        )
+        # Some devices send rows as: PIN<TAB>time<TAB>status...
+        parts = line.split("\t")
+        if len(parts) >= 2:
+            if parts[0].strip().upper() == "ATTLOG" and len(parts) >= 4:
+                pin = parts[1].strip()
+                time_str = parts[2].strip()
+                status = parts[3].strip()
+            else:
+                pin = parts[0].strip()
+                time_str = parts[1].strip()
+                status = parts[2].strip() if len(parts) > 2 else ""
+
+            records.append(
+                {
+                    "sn": "",
+                    "table": "ATTLOG",
+                    "pin": pin,
+                    "time": time_str,
+                    "status": status,
+                }
+            )
+            continue
 
     return records
+
+
+def _is_out_status(status):
+    """
+    Common ZKTeco status/punch codes considered as OUT.
+    """
+    return str(status).strip() in {"1", "2", "5", "out", "OUT"}
+
+
+def _resolve_employee(pin):
+    employee = Employee.objects.filter(badge_id=pin).first()
+    if employee:
+        return employee
+
+    try:
+        from biometric.models import BiometricEmployees
+
+        mapped = BiometricEmployees.objects.filter(user_id=pin).select_related(
+            "employee_id"
+        ).first()
+        if mapped:
+            return mapped.employee_id
+
+        mapped = BiometricEmployees.objects.filter(ref_user_id=pin).select_related(
+            "employee_id"
+        ).first()
+        if mapped:
+            return mapped.employee_id
+    except Exception:
+        logger.debug("BiometricEmployees fallback lookup failed for pin=%s", pin)
+
+    return None
 
 
 def _create_or_update_attendance(employee, attendance_dt, device_sn, status):
@@ -87,15 +144,28 @@ def _create_or_update_attendance(employee, attendance_dt, device_sn, status):
     attendance_date = attendance_dt.date()
     attendance_time = attendance_dt.time()
 
-    duplicate_exists = AttendanceActivity.objects.filter(
-        employee_id=employee,
-        in_datetime=attendance_dt,
-    ).exists() or AttendanceActivity.objects.filter(
-        employee_id=employee,
-        attendance_date=attendance_date,
-        clock_in_date=attendance_date,
-        clock_in=attendance_time,
-    ).exists()
+    is_out = _is_out_status(status)
+
+    if is_out:
+        duplicate_exists = AttendanceActivity.objects.filter(
+            employee_id=employee,
+            out_datetime=attendance_dt,
+        ).exists() or AttendanceActivity.objects.filter(
+            employee_id=employee,
+            attendance_date=attendance_date,
+            clock_out_date=attendance_date,
+            clock_out=attendance_time,
+        ).exists()
+    else:
+        duplicate_exists = AttendanceActivity.objects.filter(
+            employee_id=employee,
+            in_datetime=attendance_dt,
+        ).exists() or AttendanceActivity.objects.filter(
+            employee_id=employee,
+            attendance_date=attendance_date,
+            clock_in_date=attendance_date,
+            clock_in=attendance_time,
+        ).exists()
 
     if duplicate_exists:
         logger.info(
@@ -107,7 +177,7 @@ def _create_or_update_attendance(employee, attendance_dt, device_sn, status):
         )
         return False
 
-    # Source is biometric by using the biometric flow (request.datetime is consumed by clock_in)
+    # Source is biometric by using the biometric flow (request.datetime is consumed by clock_in/out)
     if employee.employee_user_id:
         biometric_request = Request(
             user=employee.employee_user_id,
@@ -115,9 +185,12 @@ def _create_or_update_attendance(employee, attendance_dt, device_sn, status):
             time=attendance_time,
             datetime=attendance_dt,
         )
-        clock_in(biometric_request)
+        if is_out:
+            clock_out(biometric_request)
+        else:
+            clock_in(biometric_request)
     else:
-        attendance, _ = Attendance.objects.get_or_create(
+        attendance, created = Attendance.objects.get_or_create(
             employee_id=employee,
             attendance_date=attendance_date,
             defaults={
@@ -127,30 +200,69 @@ def _create_or_update_attendance(employee, attendance_dt, device_sn, status):
                 "work_type_id": employee.get_work_type(),
             },
         )
-        if (
-            attendance.attendance_clock_in is None
-            or attendance.attendance_clock_in > attendance_time
-        ):
-            attendance.attendance_clock_in = attendance_time
-            attendance.attendance_clock_in_date = attendance_date
+
+        if not is_out:
+            if (
+                attendance.attendance_clock_in is None
+                or attendance.attendance_clock_in > attendance_time
+            ):
+                attendance.attendance_clock_in = attendance_time
+                attendance.attendance_clock_in_date = attendance_date
+                attendance.shift_id = attendance.shift_id or employee.get_shift()
+                attendance.work_type_id = (
+                    attendance.work_type_id or employee.get_work_type()
+                )
+                attendance.save(
+                    update_fields=[
+                        "attendance_clock_in",
+                        "attendance_clock_in_date",
+                        "shift_id",
+                        "work_type_id",
+                    ]
+                )
+
+            AttendanceActivity.objects.create(
+                employee_id=employee,
+                attendance_date=attendance_date,
+                clock_in_date=attendance_date,
+                clock_in=attendance_time,
+                in_datetime=attendance_dt,
+            )
+        else:
+            if created:
+                attendance.attendance_clock_in = attendance_time
+                attendance.attendance_clock_in_date = attendance_date
+            attendance.attendance_clock_out = attendance_time
+            attendance.attendance_clock_out_date = attendance_date
             attendance.shift_id = attendance.shift_id or employee.get_shift()
             attendance.work_type_id = attendance.work_type_id or employee.get_work_type()
             attendance.save(
                 update_fields=[
                     "attendance_clock_in",
                     "attendance_clock_in_date",
+                    "attendance_clock_out",
+                    "attendance_clock_out_date",
                     "shift_id",
                     "work_type_id",
                 ]
             )
 
-        AttendanceActivity.objects.create(
-            employee_id=employee,
-            attendance_date=attendance_date,
-            clock_in_date=attendance_date,
-            clock_in=attendance_time,
-            in_datetime=attendance_dt,
-        )
+            open_activity = (
+                AttendanceActivity.objects.filter(
+                    employee_id=employee,
+                    attendance_date=attendance_date,
+                    clock_out__isnull=True,
+                )
+                .order_by("-in_datetime")
+                .first()
+            )
+            if open_activity:
+                open_activity.clock_out = attendance_time
+                open_activity.clock_out_date = attendance_date
+                open_activity.out_datetime = attendance_dt
+                open_activity.save(
+                    update_fields=["clock_out", "clock_out_date", "out_datetime"]
+                )
 
     logger.info(
         "Biometric attendance accepted. source=biometric device_sn=%s pin=%s time=%s status=%s",
@@ -215,7 +327,7 @@ def iclock_cdata(request):
                 )
                 continue
 
-            employee = Employee.objects.filter(badge_id=pin).first()
+            employee = _resolve_employee(pin)
             if not employee:
                 logger.warning(
                     "No employee found for biometric PIN. device_sn=%s pin=%s",

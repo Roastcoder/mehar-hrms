@@ -212,7 +212,7 @@ class ZKBioAttendance(Thread):
                                             )
                                         except Exception as error:
                                             logger.error(
-                                                "Got an error in clock_out", error
+                                                "Got an error in clock_out: %s", error
                                             )
                                             continue
                             else:
@@ -308,7 +308,7 @@ class COSECBioAttendanceThread(Thread):
                         elif punch_code in ["2", "4", "6", "8", "10"]:
                             clock_out(request_data)
                     except Exception as error:
-                        logger.error("Error processing attendance: ", error)
+                        logger.error("Error processing attendance: %s", error)
 
                 if attendances:
                     last_attendance = attendances[-1]
@@ -328,7 +328,7 @@ class COSECBioAttendanceThread(Thread):
             device = BiometricDevices.objects.get(id=self.device_id)
             device.is_live = False
             device.save()
-            logger.error("Error in COSECBioAttendanceThread: ", error)
+            logger.error("Error in COSECBioAttendanceThread: %s", error)
 
     def stop(self):
         """Set the stop event to signal the thread to stop gracefully."""
@@ -441,7 +441,9 @@ def biometric_device_schedule(request, device_id):
                     scheduler.start()
                     return HttpResponse("<script>window.location.reload()</script>")
                 except Exception as error:
-                    logger.error("An error comes in biometric_device_schedule ", error)
+                    logger.error(
+                        "An error comes in biometric_device_schedule: %s", error
+                    )
                     script = """
                     <script>
                         Swal.fire({
@@ -891,12 +893,17 @@ def biometric_device_bulk_fetch_logs(request):
         )
         return HttpResponse(script)
 
-    attendance_count, error_message = zk_biometric_attendance_logs(zk_devices)
+    attendance_count, error_message, stats = zk_biometric_attendance_logs(zk_devices)
     if isinstance(attendance_count, int):
         script = render_connection_response(
             _("Logs Fetched Successfully"),
             _(
-                f"Biometric attendance logs fetched successfully. Total records: {attendance_count}"
+                "Biometric attendance logs fetched successfully. "
+                f"Total records: {attendance_count} | "
+                f"received from device: {stats['received_from_device']} | "
+                f"new logs found: {stats['new_logs_found']} | "
+                f"logs mapped to employees: {stats['logs_mapped_to_employees']} | "
+                f"duplicates skipped: {stats['duplicates_skipped']}"
             ),
             "success",
         )
@@ -931,12 +938,17 @@ def biometric_device_fetch_logs(request, device_id=None):
         return HttpResponse("Device not found.", status=404)
     script = ""
     if device.machine_type == "zk":
-        attendance_count, error_message = zk_biometric_attendance_logs(device)
+        attendance_count, error_message, stats = zk_biometric_attendance_logs(device)
         if isinstance(attendance_count, int):
             script = render_connection_response(
                 _("Logs Fetched Successfully"),
                 _(
-                    f"Biometric attendance logs fetched successfully. Total records: {attendance_count}"
+                    "Biometric attendance logs fetched successfully. "
+                    f"Total records: {attendance_count} | "
+                    f"received from device: {stats['received_from_device']} | "
+                    f"new logs found: {stats['new_logs_found']} | "
+                    f"logs mapped to employees: {stats['logs_mapped_to_employees']} | "
+                    f"duplicates skipped: {stats['duplicates_skipped']}"
                 ),
                 "success",
             )
@@ -1096,6 +1108,39 @@ def zk_employees_fetch(device):
     return employees
 
 
+def zk_employees_mapped_fallback(device, search=None):
+    """
+    Fallback employee list for ADMS deployments where direct ZK socket access is unavailable.
+    """
+    mapped = BiometricEmployees.objects.filter(device_id=device).select_related(
+        "employee_id"
+    )
+    if search:
+        mapped = mapped.filter(employee_id__employee_first_name__icontains=search)
+
+    employees = []
+    for bio in mapped:
+        employee = bio.employee_id
+        work_info = EmployeeWorkInformation.objects.filter(employee_id=employee).first()
+        employees.append(
+            {
+                "uid": bio.uid if bio.uid is not None else 0,
+                "user_id": bio.user_id,
+                "employee": employee,
+                "badge_id": employee.badge_id,
+                "finger": [],
+                "work_email": work_info.email if work_info and work_info.email else None,
+                "phone": work_info.mobile if work_info and work_info.mobile else None,
+                "job_position": (
+                    work_info.job_position_id
+                    if work_info and work_info.job_position_id
+                    else None
+                ),
+            }
+        )
+    return employees
+
+
 def cosec_employee_fetch(device_id):
     """
     Fetch employee data from the COSEC biometric device associated with the specified device ID.
@@ -1228,7 +1273,16 @@ def biometric_device_employees(request, device_id, **kwargs):
         try:
             if device.machine_type == "zk":
                 employee_add_form = EmployeeBiometricAddForm()
-                employees = zk_employees_fetch(device)
+                try:
+                    employees = zk_employees_fetch(device)
+                except Exception:
+                    employees = zk_employees_mapped_fallback(device)
+                    messages.warning(
+                        request,
+                        _(
+                            "Direct ZKTeco connection is unavailable. Showing mapped employees from Horilla (ADMS mode)."
+                        ),
+                    )
                 employees = paginator_qry(employees, request.GET.get("page"))
                 context = {
                     "employees": employees,
@@ -1273,12 +1327,11 @@ def biometric_device_employees(request, device_id, **kwargs):
                     context,
                 )
         except Exception as error:
-            logger.error("An error occurred: ", error)
+            logger.error("An error occurred in biometric_device_employees: %s", error)
             messages.info(
                 request,
                 _(
-                    "Failed to establish a connection. Please verify the accuracy of the IP\
-                    Address , Port No. and Password of the device."
+                    "Unable to reach the device directly. In ADMS mode, keep device URL pointed to /iclock and use mapped employees."
                 ),
             )
     else:
@@ -1309,15 +1362,18 @@ def search_employee_device(request):
     device = BiometricDevices.objects.get(id=device_id)
     search = request.GET.get("search")
     if device.machine_type == "zk":
-        employees = zk_employees_fetch(device)
-        if search:
-            search_employees = BiometricEmployees.objects.filter(
-                employee_id__employee_first_name__icontains=search
-            )
-            search_uids = search_employees.values_list("uid", flat=True)
-            employees = [
-                employee for employee in employees if employee.uid in search_uids
-            ]
+        try:
+            employees = zk_employees_fetch(device)
+            if search:
+                search_employees = BiometricEmployees.objects.filter(
+                    employee_id__employee_first_name__icontains=search
+                )
+                search_uids = search_employees.values_list("uid", flat=True)
+                employees = [
+                    employee for employee in employees if employee.uid in search_uids
+                ]
+        except Exception:
+            employees = zk_employees_mapped_fallback(device, search=search)
         employees = paginator_qry(employees, request.GET.get("page"))
         template = "biometric/list_employees_biometric.html"
         context = {
@@ -1631,7 +1687,7 @@ def bio_users_bulk_delete(request):
                 ),
             )
     except Exception as error:
-        logger.error("An error occurred: ", error)
+        logger.error("An error occurred in delete_biometric_user: %s", error)
     return JsonResponse({"messages": "Success"})
 
 
@@ -1673,7 +1729,7 @@ def cosec_users_bulk_delete(request):
             )
 
     except Exception as error:
-        logger.error("An error occurred: ", error)
+        logger.error("An error occurred in cosec_users_bulk_delete: %s", error)
     return JsonResponse({"messages": "Success"})
 
 
@@ -1804,7 +1860,7 @@ def add_biometric_user(request, device_id):
         except Exception as error:
             if device.machine_type == "zk":
                 conn.disable_device()
-                logger.error("An error occurred: ", str(error))
+                logger.error("An error occurred while adding biometric user: %s", error)
         return HttpResponse("<script>window.location.reload()</script>")
     return render(
         request,
@@ -2119,7 +2175,7 @@ def biometric_device_live(request):
         except TimeoutError as error:
             device.is_live = False
             device.save()
-            logger.error("An error comes in biometric_device_live", error)
+            logger.error("An error comes in biometric_device_live: %s", error)
             script = """
            <script>
                 Swal.fire({
@@ -2171,7 +2227,7 @@ def zk_biometric_attendance_logs(device_or_devices):
     Handles scenarios where the same user_id may exist across multiple devices for the same employee.
 
     :param device_or_devices: A single BiometricDevice instance or a queryset/list of them.
-    :return: Tuple (number_of_attendance_processed, error_message or None)
+    :return: Tuple (number_of_attendance_processed, error_message or None, stats dict)
     """
     if hasattr(device_or_devices, "__iter__") and not isinstance(
         device_or_devices, dict
@@ -2182,6 +2238,12 @@ def zk_biometric_attendance_logs(device_or_devices):
 
     errors = []
     combined_attendances = []
+    stats = {
+        "received_from_device": 0,
+        "new_logs_found": 0,
+        "logs_mapped_to_employees": 0,
+        "duplicates_skipped": 0,
+    }
     patch_direction = {"in": 0, "out": 1}
 
     bio_id_map = {
@@ -2206,6 +2268,7 @@ def zk_biometric_attendance_logs(device_or_devices):
             conn = zk_device.connect()
             conn.enable_device()
             attendances = conn.get_attendance()
+            stats["received_from_device"] += len(attendances or [])
             if not attendances:
                 continue
 
@@ -2248,6 +2311,7 @@ def zk_biometric_attendance_logs(device_or_devices):
 
     # Sort all filtered attendances by time
     combined_attendances.sort(key=lambda a: a.timestamp)
+    stats["new_logs_found"] = len(combined_attendances)
 
     for attendance in combined_attendances:
         user_id = attendance.user_id
@@ -2258,6 +2322,18 @@ def zk_biometric_attendance_logs(device_or_devices):
         device_id = attendance.device.id
         bio_id = bio_id_map.get((device_id, user_id))
         if bio_id:
+            stats["logs_mapped_to_employees"] += 1
+            is_duplicate = AttendanceActivity.objects.filter(
+                employee_id=bio_id.employee_id,
+                in_datetime=date_time,
+            ).exists() or AttendanceActivity.objects.filter(
+                employee_id=bio_id.employee_id,
+                out_datetime=date_time,
+            ).exists()
+            if is_duplicate:
+                stats["duplicates_skipped"] += 1
+                continue
+
             request_data = Request(
                 user=bio_id.employee_id.employee_user_id,
                 date=date,
@@ -2275,7 +2351,7 @@ def zk_biometric_attendance_logs(device_or_devices):
                     exc_info=True,
                 )
 
-    return len(combined_attendances), "; ".join(errors) if errors else None
+    return len(combined_attendances), "; ".join(errors) if errors else None, stats
 
 
 def zk_biometric_attendance_scheduler(device_id):
@@ -2453,7 +2529,7 @@ def cosec_biometric_attendance_logs(device):
             else:
                 pass
         except Exception as error:
-            logger.error("Error processing attendance: ", error)
+            logger.error("Error processing attendance: %s", error)
 
     if attendances:
         last_attendance = attendances[-1]
