@@ -27,6 +27,15 @@
                     {% else %}
                         <span class="oh-kanban-card__subtitle d-block">{{ device.api_url }}</span>
                     {% endif %}
+                    {% if device.machine_type == "zk" %}
+                        <span class="oh-kanban-card__subtitle d-block">
+                            {% if device.adms_last_seen %}
+                                {% trans "ADMS last seen:" %} {{ device.adms_last_seen }}
+                            {% else %}
+                                {% trans "ADMS last seen:" %} {% trans "No recent push" %}
+                            {% endif %}
+                        </span>
+                    {% endif %}
                     <table>
                         <tr>
                             {% if device.machine_type == "zk" or device.machine_type == "cosec" %}

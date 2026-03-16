@@ -69,6 +69,26 @@ def _sn_cache_key(sn: str) -> str:
     return f"{ADMS_LAST_SEEN_SN_PREFIX}{digest}"
 
 
+def _get_adms_last_seen_for_device(device):
+    """
+    Return the last-seen ADMS timestamp for a given device, if available.
+
+    This uses the same cache keys populated by the `/attendance/iclock/cdata`
+    ADMS handler (see `attendance/zkteco_views.py`).
+    """
+    # Currently only ZKTeco / eSSL devices use the ADMS push protocol.
+    if getattr(device, "machine_type", None) != "zk":
+        return None
+
+    possible_sn = (getattr(device, "name", "") or "").strip()
+    last_seen = None
+    if possible_sn:
+        last_seen = cache.get(f"{ADMS_LAST_SEEN_SN_PREFIX}{possible_sn}")
+    if not last_seen:
+        last_seen = cache.get(ADMS_LAST_SEEN_ANY_KEY)
+    return last_seen
+
+
 def str_time_seconds(time):
     """
     this method is used reconvert time in H:M formate string back to seconds and return it
@@ -375,6 +395,10 @@ def biometric_devices_view(request):
 
     # Paginate
     biometric_devices = paginator_qry(biometric_devices, request.GET.get("page"))
+
+    # Attach ADMS last-seen info to compatible devices for UI display
+    for device in biometric_devices:
+        device.adms_last_seen = _get_adms_last_seen_for_device(device)
 
     # Parse filters for reuse
     data_dict = parse_qs(previous_data)
