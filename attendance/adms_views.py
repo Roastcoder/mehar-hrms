@@ -167,6 +167,7 @@ def iclock_cdata(request):
     if request.method == "POST":
         raw_body = request.body.decode("utf-8", errors="ignore").strip()
         logger.info(f"Log push from SN={sn}: {len(raw_body)} bytes")
+        logger.info(f"RAW DATA from SN={sn}: {repr(raw_body)}")
         
         lines = raw_body.splitlines()
         processed_count = 0
@@ -174,6 +175,7 @@ def iclock_cdata(request):
             line = line.strip()
             if not line:
                 continue
+            logger.info(f"Parsing line: {repr(line)}")
             if _process_attlog_line(line, sn):
                 processed_count += 1
         
