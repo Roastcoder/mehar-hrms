@@ -1,6 +1,6 @@
 [phases.setup]
-nixPkgs = ['python39', 'postgresql']
-nixLibs = ['python39']
+nixPkgs = ['python311', 'postgresql']
+nixLibs = ['python311']
 
 [phases.install]
 cmds = ['python -m pip install --upgrade pip', 'python -m pip install -r requirements.txt', 'python -m pip install gunicorn']
