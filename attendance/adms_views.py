@@ -82,8 +82,30 @@ def _resolve_employee(pin):
         pass
     return None
 
-def _is_out_status(status):
-    return str(status).strip() in {"1", "2", "5", "out", "OUT"}
+def _is_out_status(status, employee, attendance_dt):
+    """
+    Determine if this punch should be treated as an OUT punch.
+    Standard IN punches are 0, 3, 4. OUT punches are 1, 2, 5.
+    If the device only sends IN punches (e.g. 0), auto-toggle based on
+    whether the employee already has an open IN activity today.
+    """
+    status_str = str(status).strip()
+    if status_str in {"1", "2", "5", "out", "OUT"}:
+        return True
+    
+    # If it's a generic or default IN punch, check for auto-toggling
+    if status_str in {"", "0", "3", "4", "255"}:
+        # Find if there's an open activity (clock_out is None) created BEFORE this punch today
+        has_open_in = AttendanceActivity.objects.filter(
+            employee_id=employee,
+            attendance_date=attendance_dt.date(),
+            clock_out__isnull=True,
+            in_datetime__lt=attendance_dt
+        ).exists()
+        if has_open_in:
+            return True
+        
+    return False
 
 def _parse_adms_lines(raw_text, query_string=""):
     """
@@ -182,7 +204,7 @@ def _process_record(record, device_sn):
         _log(f"  No employee for PIN={pin}")
         return False
 
-    is_out = _is_out_status(status)
+    is_out = _is_out_status(status, employee, attendance_dt)
     attendance_date = attendance_dt.date()
     attendance_time = attendance_dt.time()
 
