@@ -2038,29 +2038,49 @@ def biometric_device_live(request):
     device = BiometricDevices.objects.get(id=device_id)
     is_live = is_live == "on"
     if is_live:
-        port_no = device.port
-        machine_ip = device.machine_ip
-        password = int(device.zk_password)
         conn = None
-        # create ZK instance
         try:
             if device.machine_type == "zk":
-                zk_device = ZK(
-                    machine_ip,
-                    port=port_no,
-                    timeout=5,
-                    password=int(password),
-                    force_udp=False,
-                    ommit_ping=False,
-                )
-                conn = zk_device.connect()
-                instance = ZKBioAttendance(machine_ip, port_no, password)
-                conn.test_voice(index=14)
-                if conn:
-                    device.is_live = True
-                    device.is_scheduler = False
-                    device.save()
-                    instance.start()
+                # ADMS deployments push logs to the server, so no direct TCP socket is opened here.
+                device.is_live = True
+                device.is_scheduler = False
+                device.save(update_fields=["is_live", "is_scheduler"])
+
+                last_seen = None
+                possible_sn = (device.name or "").strip()
+                if possible_sn:
+                    last_seen = cache.get(f"{ADMS_LAST_SEEN_SN_PREFIX}{possible_sn}")
+                if not last_seen:
+                    last_seen = cache.get(ADMS_LAST_SEEN_ANY_KEY)
+
+                if last_seen:
+                    script = """<script>
+                            Swal.fire({
+                              text: "ADMS live mode activated. Device callbacks are being received.",
+                              icon: "success",
+                              showConfirmButton: false,
+                              timer: 1800,
+                              timerProgressBar: true,
+                              didClose: () => {
+                                location.reload();
+                                },
+                            });
+                            </script>
+                        """
+                else:
+                    script = """<script>
+                            Swal.fire({
+                              text: "ADMS live mode activated. Waiting for the device to push callbacks.",
+                              icon: "warning",
+                              showConfirmButton: false,
+                              timer: 2800,
+                              timerProgressBar: true,
+                              didClose: () => {
+                                location.reload();
+                                },
+                            });
+                            </script>
+                        """
             elif device.machine_type == "cosec":
                 cosec = COSECBiometric(
                     device.machine_ip,
@@ -2082,19 +2102,20 @@ def biometric_device_live(request):
             else:
                 pass
 
-            script = """<script>
-                    Swal.fire({
-                      text: "The live capture mode has been activated successfully.",
-                      icon: "success",
-                      showConfirmButton: false,
-                      timer: 1500,
-                      timerProgressBar: true, // Show a progress bar as the timer counts down
-                      didClose: () => {
-                        location.reload(); // Reload the page after the SweetAlert is closed
-                        },
-                    });
-                    </script>
-                """
+            if device.machine_type != "zk":
+                script = """<script>
+                        Swal.fire({
+                          text: "The live capture mode has been activated successfully.",
+                          icon: "success",
+                          showConfirmButton: false,
+                          timer: 1500,
+                          timerProgressBar: true, // Show a progress bar as the timer counts down
+                          didClose: () => {
+                            location.reload(); // Reload the page after the SweetAlert is closed
+                            },
+                        });
+                        </script>
+                    """
         except TimeoutError as error:
             device.is_live = False
             device.save()
@@ -2625,10 +2646,7 @@ def etimeoffice_biometric_attendance_scheduler(device_id):
 try:
     # Restart live capture threads for devices that were in live mode
     for device in BiometricDevices.objects.filter(is_live=True):
-        if device.machine_type == "zk":
-            instance = ZKBioAttendance(device.machine_ip, device.port, int(device.zk_password))
-            instance.start()
-        elif device.machine_type == "cosec":
+        if device.machine_type == "cosec":
             thread = COSECBioAttendanceThread(device.id)
             thread.start()
             BIO_DEVICE_THREADS[device.id] = thread
