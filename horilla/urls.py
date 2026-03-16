@@ -20,7 +20,7 @@ from django.http import JsonResponse
 from django.urls import include, path, re_path
 
 import notifications.urls
-from attendance.zkteco_views import iclock_cdata
+from attendance.zkteco_views import iclock_cdata, iclock_getrequest, iclock_ping
 from base.signup_view import signup
 
 from . import settings
@@ -33,6 +33,15 @@ def health_check(request):
 urlpatterns = [
     path("admin/", admin.site.urls),
     path("iclock/cdata", iclock_cdata),
+    path("iclock/ping", iclock_ping),
+    path("iclock/getrequest", iclock_getrequest),
+    # Compatibility routes for devices configured with nested/malformed base paths
+    path("iclock/cdata/iclock/cdata", iclock_cdata),
+    path("iclock/cdata/iclock/ping", iclock_ping),
+    path("iclock/cdata/iclock/getrequest", iclock_getrequest),
+    path("icloud/cdata/iclock/cdata", iclock_cdata),
+    path("icloud/cdata/iclock/ping", iclock_ping),
+    path("icloud/cdata/iclock/getrequest", iclock_getrequest),
     path("signup/", signup, name="signup"),
     path("accounts/", include("django.contrib.auth.urls")),
     path("accounts/", include("django.contrib.auth.urls")),

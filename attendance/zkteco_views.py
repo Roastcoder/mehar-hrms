@@ -221,3 +221,31 @@ def iclock_cdata(request):
         logger.exception("Unhandled error in ZKTeco /iclock/cdata")
 
     return HttpResponse("OK", status=200, content_type="text/plain")
+
+
+@csrf_exempt
+@require_http_methods(["GET", "POST"])
+def iclock_ping(request):
+    """
+    Handle ADMS ping probes from devices.
+    """
+    logger.info(
+        "ZKTeco ping request: path=%s query=%s",
+        request.path,
+        request.META.get("QUERY_STRING", ""),
+    )
+    return HttpResponse("OK", status=200, content_type="text/plain")
+
+
+@csrf_exempt
+@require_http_methods(["GET", "POST"])
+def iclock_getrequest(request):
+    """
+    Handle ADMS getrequest calls (device polling for commands).
+    """
+    logger.info(
+        "ZKTeco getrequest: path=%s query=%s",
+        request.path,
+        request.META.get("QUERY_STRING", ""),
+    )
+    return HttpResponse("OK", status=200, content_type="text/plain")
