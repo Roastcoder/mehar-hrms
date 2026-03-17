@@ -67,9 +67,13 @@ class AttendanceActivity(HorillaModel):
     in_datetime = models.DateTimeField(null=True)
     clock_in_date = models.DateField(null=True, verbose_name=_("In Date"))
     clock_in = models.TimeField(verbose_name=_("Check In"))
+    clock_in_latitude = models.FloatField(blank=True, null=True, verbose_name=_("Clock-In Latitude"))
+    clock_in_longitude = models.FloatField(blank=True, null=True, verbose_name=_("Clock-In Longitude"))
     clock_out_date = models.DateField(null=True, verbose_name=_("Out Date"))
     out_datetime = models.DateTimeField(null=True)
     clock_out = models.TimeField(null=True, verbose_name=_("Check Out"))
+    clock_out_latitude = models.FloatField(blank=True, null=True, verbose_name=_("Clock-Out Latitude"))
+    clock_out_longitude = models.FloatField(blank=True, null=True, verbose_name=_("Clock-Out Longitude"))
     objects = HorillaCompanyManager(
         related_company_field="employee_id__employee_work_info__company_id"
     )

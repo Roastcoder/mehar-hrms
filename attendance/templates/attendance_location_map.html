@@ -1,0 +1,71 @@
+{% load i18n %}
+<!DOCTYPE html>
+<html>
+<head>
+    <title>{% trans "Attendance Locations" %}</title>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <style>
+        #map { height: 600px; width: 100%; }
+        .info-box { padding: 10px; background: white; margin: 10px; border-radius: 5px; }
+    </style>
+</head>
+<body>
+    <div class="info-box">
+        <h2>{% trans "Attendance Locations Map" %}</h2>
+        <p>{% trans "View where employees marked their attendance" %}</p>
+    </div>
+    <div id="map"></div>
+    
+    <script>
+        // Initialize map
+        var map = L.map('map').setView([{{ center_lat|default:"0" }}, {{ center_lng|default:"0" }}], 13);
+        
+        // Add OpenStreetMap tiles
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            attribution: '© OpenStreetMap contributors'
+        }).addTo(map);
+        
+        // Add company geofence if available
+        {% if geofence %}
+        var circle = L.circle([{{ geofence.latitude }}, {{ geofence.longitude }}], {
+            color: 'blue',
+            fillColor: '#30f',
+            fillOpacity: 0.2,
+            radius: {{ geofence.radius_in_meters }}
+        }).addTo(map);
+        circle.bindPopup("<b>{% trans 'Company Location' %}</b><br>{% trans 'Allowed Radius' %}: {{ geofence.radius_in_meters }}m");
+        {% endif %}
+        
+        // Add attendance markers
+        var attendanceData = {{ attendance_locations|safe }};
+        attendanceData.forEach(function(item) {
+            if (item.clock_in_lat && item.clock_in_lng) {
+                var marker = L.marker([item.clock_in_lat, item.clock_in_lng]).addTo(map);
+                marker.bindPopup(
+                    "<b>" + item.employee + "</b><br>" +
+                    "{% trans 'Clock In' %}: " + item.clock_in_time + "<br>" +
+                    "{% trans 'Date' %}: " + item.date
+                );
+            }
+            if (item.clock_out_lat && item.clock_out_lng) {
+                var marker = L.marker([item.clock_out_lat, item.clock_out_lng], {
+                    icon: L.icon({
+                        iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-red.png',
+                        shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/0.7.7/images/marker-shadow.png',
+                        iconSize: [25, 41],
+                        iconAnchor: [12, 41],
+                        popupAnchor: [1, -34],
+                        shadowSize: [41, 41]
+                    })
+                }).addTo(map);
+                marker.bindPopup(
+                    "<b>" + item.employee + "</b><br>" +
+                    "{% trans 'Clock Out' %}: " + item.clock_out_time + "<br>" +
+                    "{% trans 'Date' %}: " + item.date
+                );
+            }
+        });
+    </script>
+</body>
+</html>

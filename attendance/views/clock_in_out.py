@@ -136,6 +136,13 @@ def clock_in_attendance_and_activity(
         start_time      : start time in shift schedule
         end_time        : end time in shift schedule
     """
+    # Get location data from request if available
+    request = getattr(_thread_locals, "request", None)
+    latitude = None
+    longitude = None
+    if request and hasattr(request, 'data'):
+        latitude = request.data.get('latitude')
+        longitude = request.data.get('longitude')
 
     # attendance activity create
     activity = AttendanceActivity.objects.filter(
@@ -158,6 +165,8 @@ def clock_in_attendance_and_activity(
         shift_day=day,
         clock_in=in_datetime,
         in_datetime=in_datetime,
+        clock_in_latitude=latitude,
+        clock_in_longitude=longitude,
     )
     # create attendance if not exist
     attendance = Attendance.objects.filter(
@@ -355,6 +364,13 @@ def clock_out_attendance_and_activity(employee, date_today, now, out_datetime=No
         date_today  : today date
         now         : now
     """
+    # Get location data from request if available
+    request = getattr(_thread_locals, "request", None)
+    latitude = None
+    longitude = None
+    if request and hasattr(request, 'data'):
+        latitude = request.data.get('latitude')
+        longitude = request.data.get('longitude')
 
     attendance_activities = AttendanceActivity.objects.filter(
         employee_id=employee,
@@ -368,6 +384,8 @@ def clock_out_attendance_and_activity(employee, date_today, now, out_datetime=No
         attendance_activity.clock_out = out_datetime
         attendance_activity.clock_out_date = date_today
         attendance_activity.out_datetime = out_datetime
+        attendance_activity.clock_out_latitude = latitude
+        attendance_activity.clock_out_longitude = longitude
         attendance_activity.save()
 
         attendance_activities = attendance_activities.filter(

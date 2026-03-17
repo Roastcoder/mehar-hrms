@@ -18,6 +18,7 @@ from base.forms import AttendanceAllowedIPForm
 from base.models import AttendanceAllowedIP
 
 from .views import views
+from .views.location_views import attendance_location_map
 from .zkteco_views import iclock_cdata
 from . import adms_views
 
@@ -539,5 +540,10 @@ urlpatterns = [
         "settings/geo-face-config/",
         attendance.views.geofaceconfig.geofaceconfig,
         name="geo-face-config",
+    ),
+    path(
+        "attendance-location-map/",
+        attendance_location_map,
+        name="attendance-location-map",
     ),
 ]
