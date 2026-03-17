@@ -5,6 +5,7 @@ from drf_yasg.views import get_schema_view
 from rest_framework import permissions
 
 from horilla_api.schema import OrderedTagSchemaGenerator
+from horilla_api.api_views.ward_views import WardCheckAPIView
 
 # Create schema view for Swagger and ReDoc
 schema_view = get_schema_view(
@@ -43,4 +44,8 @@ urlpatterns = [
     path("attendance/", include("horilla_api.api_urls.attendance.urls")),
     path("leave/", include("horilla_api.api_urls.leave.urls")),
     path("helpdesk/", include("horilla_api.api_urls.helpdesk.urls")),
+    # Ward check endpoint
+    path("ward/check-ward/", WardCheckAPIView.as_view(), name="api-ward-check"),
+    # Geofencing endpoints
+    path("geofencing/", include("geofencing.urls")),
 ]

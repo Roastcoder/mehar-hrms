@@ -3,7 +3,7 @@ from django.urls import path
 from ...api_views.employee import views as views
 
 urlpatterns = [
-    # path('employees/', views.EmployeeAPIView.as_view(), name='api-employees-list'),
+    path('employees/', views.EmployeeListAPIView.as_view(), name='api-employees-list'),
     path(
         "employees/<int:pk>/",
         views.EmployeeAPIView.as_view(),
@@ -99,7 +99,7 @@ urlpatterns = [
         name="api-document-detail",
     ),
     path(
-        "employee-bulk- archive/<str:is_active>/",
+        "employee-bulk-archive/<str:is_active>/",
         views.EmployeeBulkArchiveView.as_view(),
         name="api-employee-bulk-archive",
     ),

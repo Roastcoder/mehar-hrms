@@ -340,15 +340,31 @@ class EmployeeWorkInformationAPIView(APIView):
 
     permission_classes = [IsAuthenticated]
 
-    def get(self, request, pk):
-        work_info = EmployeeWorkInformation.objects.get(pk=pk)
-        if (
-            request.user.employee_get
-            in [work_info.employee_id, work_info.reporting_manager_id]
-        ) or request.user.has_perm("employee.view_employeeworkinformation"):
-            serializer = EmployeeWorkInformationSerializer(work_info)
-            return Response(serializer.data, status=200)
-        return Response({"message": "No permission"}, status=400)
+    def get(self, request, pk=None):
+        if pk:
+            try:
+                work_info = EmployeeWorkInformation.objects.get(pk=pk)
+                if (
+                    request.user.employee_get
+                    in [work_info.employee_id, work_info.reporting_manager_id]
+                ) or request.user.has_perm("employee.view_employeeworkinformation"):
+                    serializer = EmployeeWorkInformationSerializer(work_info)
+                    return Response(serializer.data, status=200)
+                return Response({"message": "No permission"}, status=400)
+            except EmployeeWorkInformation.DoesNotExist:
+                return Response({"error": "Work information not found"}, status=404)
+        else:
+            # Return list of work information if no pk provided
+            queryset = EmployeeWorkInformation.objects.all()
+            if not request.user.has_perm("employee.view_employeeworkinformation"):
+                queryset = queryset.filter(
+                    Q(employee_id=request.user.employee_get) |
+                    Q(reporting_manager_id=request.user.employee_get)
+                )
+            paginator = PageNumberPagination()
+            page = paginator.paginate_queryset(queryset, request)
+            serializer = EmployeeWorkInformationSerializer(page, many=True)
+            return paginator.get_paginated_response(serializer.data)
 
     @manager_permission_required("employee.add_employeeworkinformation")
     def post(self, request):
@@ -360,19 +376,22 @@ class EmployeeWorkInformationAPIView(APIView):
 
     @manager_permission_required("employee.change_employeeworkinformation")
     def put(self, request, pk):
-        work_info = EmployeeWorkInformation.objects.get(pk=pk)
-        if (
-            request.user.employee_get == work_info.reporting_manager_id
-            or request.user.has_perm("employee.change_employeeworkinformation")
-        ):
-            serializer = EmployeeWorkInformationSerializer(
-                work_info, data=request.data, partial=True
-            )
-            if serializer.is_valid():
-                serializer.save()
-                return Response(serializer.data)
-            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-        return Response({"message": "No permission"}, status=400)
+        try:
+            work_info = EmployeeWorkInformation.objects.get(pk=pk)
+            if (
+                request.user.employee_get == work_info.reporting_manager_id
+                or request.user.has_perm("employee.change_employeeworkinformation")
+            ):
+                serializer = EmployeeWorkInformationSerializer(
+                    work_info, data=request.data, partial=True
+                )
+                if serializer.is_valid():
+                    serializer.save()
+                    return Response(serializer.data)
+                return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+            return Response({"message": "No permission"}, status=400)
+        except EmployeeWorkInformation.DoesNotExist:
+            return Response({"error": "Work information not found"}, status=404)
 
     @method_decorator(
         permission_required("employee.delete_employeeworkinformation"), name="dispatch"
