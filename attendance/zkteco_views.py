@@ -183,11 +183,61 @@ def _resolve_employee(pin):
 def _create_or_update_attendance(employee, attendance_dt, device_sn, status):
     """
     Mark biometric check-in using Horilla clock_in flow and dedupe by exact timestamp.
+    Auto punch-out after 6 PM.
     """
     attendance_date = attendance_dt.date()
     attendance_time = attendance_dt.time()
 
     is_out = _is_out_status(status)
+    
+    # Auto punch-out during break time (1 PM to 1:30 PM)
+    if not is_out and 13 <= attendance_time.hour < 14:
+        if attendance_time.hour == 13 and attendance_time.minute < 30:
+            is_out = True
+            logger.info(
+                "Punch during break time (1:00-1:30 PM) marked as punch-out. device_sn=%s pin=%s time=%s",
+                device_sn,
+                employee.badge_id,
+                attendance_dt.isoformat(),
+            )
+    
+    # If user punches after 6 PM, treat it as punch-out
+    if attendance_time.hour >= 18 and not is_out:
+        is_out = True
+        logger.info(
+            "Punch after 6 PM marked as punch-out. device_sn=%s pin=%s time=%s",
+            device_sn,
+            employee.badge_id,
+            attendance_dt.isoformat(),
+        )
+    
+    # Check if first punch is after 12 PM (not punch-out) - mark as half day
+    is_half_day = False
+    if not is_out and attendance_time.hour >= 12:
+        # Check if this is the first punch of the day
+        existing_activity = AttendanceActivity.objects.filter(
+            employee_id=employee,
+            attendance_date=attendance_date,
+        ).exists()
+        
+        if not existing_activity:
+            is_half_day = True
+            logger.info(
+                "First punch after 12 PM marked as half day. device_sn=%s pin=%s time=%s",
+                device_sn,
+                employee.badge_id,
+                attendance_dt.isoformat(),
+            )
+    
+    # Auto punch-out if time is after 6 PM (18:00)
+    if attendance_time.hour >= 18 and not is_out:
+        is_out = True
+        logger.info(
+            "Auto punch-out triggered after 6 PM. device_sn=%s pin=%s time=%s",
+            device_sn,
+            employee.badge_id,
+            attendance_dt.isoformat(),
+        )
 
     if is_out:
         duplicate_exists = AttendanceActivity.objects.filter(
@@ -241,6 +291,7 @@ def _create_or_update_attendance(employee, attendance_dt, device_sn, status):
                 "attendance_clock_in": attendance_time,
                 "shift_id": employee.get_shift(),
                 "work_type_id": employee.get_work_type(),
+                "minimum_hour": "04:00" if is_half_day else None,
             },
         )
 
@@ -255,12 +306,15 @@ def _create_or_update_attendance(employee, attendance_dt, device_sn, status):
                 attendance.work_type_id = (
                     attendance.work_type_id or employee.get_work_type()
                 )
+                if is_half_day:
+                    attendance.minimum_hour = "04:00"
                 attendance.save(
                     update_fields=[
                         "attendance_clock_in",
                         "attendance_clock_in_date",
                         "shift_id",
                         "work_type_id",
+                        "minimum_hour",
                     ]
                 )
 
