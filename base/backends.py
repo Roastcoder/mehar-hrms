@@ -197,17 +197,31 @@ if EMAIL_BACKEND and EMAIL_BACKEND != default:
 class ConfiguredEmailBackend(BACKEND_CLASS):
 
     def send_messages(self, email_messages):
-        response = super(BACKEND_CLASS, self).send_messages(email_messages)
-        for message in email_messages:
-            email_log = EmailLog(
-                subject=message.subject,
-                from_email=self.dynamic_from_email_with_display_name,
-                to=message.to,
-                body=message.body,
-                status="sent" if response else "failed",
-            )
-            email_log.save()
-        return response
+        try:
+            response = super().send_messages(email_messages)
+            for message in email_messages:
+                email_log = EmailLog(
+                    subject=message.subject,
+                    from_email=getattr(self, 'dynamic_from_email_with_display_name', message.from_email),
+                    to=message.to,
+                    body=message.body,
+                    status="sent" if response else "failed",
+                )
+                email_log.save()
+            return response
+        except Exception as e:
+            logger.error(f"Email sending failed: {e}")
+            # Log failed emails
+            for message in email_messages:
+                email_log = EmailLog(
+                    subject=message.subject,
+                    from_email=getattr(self, 'dynamic_from_email_with_display_name', message.from_email),
+                    to=message.to,
+                    body=message.body,
+                    status="failed",
+                )
+                email_log.save()
+            return 0
 
 
 if EMAIL_BACKEND != default:
