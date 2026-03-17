@@ -11,7 +11,14 @@ class DateFormattingUtility {
     }
 
     getFormattedDate(date) {
-        if (!date) return '';
+        if (!date || date === 'None' || date === null || date === undefined) {
+            return '';
+        }
+        
+        // Convert string 'None' to empty string
+        if (typeof date === 'string' && date.toLowerCase() === 'none') {
+            return '';
+        }
         
         // Check if it's already a valid ISO date
         if (moment(date, moment.ISO_8601, true).isValid()) {
@@ -27,6 +34,7 @@ class DateFormattingUtility {
             'DD-MM-YYYY',
             'DD.MM.YYYY',
             'MMMM D, YYYY',
+            'MMM. D, YYYY',
             'MMM D, YYYY'
         ];
         
@@ -38,9 +46,9 @@ class DateFormattingUtility {
             }
         }
         
-        // If all else fails, return the original string
+        // If all else fails, return empty string for invalid dates
         console.warn('Could not parse date:', date);
-        return date;
+        return '';
     }
 
 

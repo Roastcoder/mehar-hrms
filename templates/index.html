@@ -14,6 +14,60 @@
     <script>
         var at_work_seconds = {{ request.user.employee_get.get_forecasted_at_work.forecasted_at_work_seconds }}
         var run = 0
+        
+        // Global reloadMessage function
+        function reloadMessage() {
+            try {
+                $('#reloadMessagesButton').click();
+            } catch (error) {
+                console.warn('reloadMessage error:', error);
+                // Fallback: reload the page if HTMX fails
+                location.reload();
+            }
+        }
+        
+        // Suppress moment.js deprecation warnings
+        if (typeof moment !== 'undefined') {
+            moment.suppressDeprecationWarnings = true;
+        }
+        
+        // Global error handler for HTMX requests
+        document.addEventListener('htmx:responseError', function(event) {
+            console.error('HTMX Error:', event.detail);
+            // Show user-friendly error message
+            if (event.detail.xhr.status === 500) {
+                Swal.fire({
+                    title: 'Server Error',
+                    text: 'An error occurred while processing your request. Please try again.',
+                    icon: 'error',
+                    confirmButtonText: 'OK'
+                });
+            }
+        });
+        
+        // Handle email sending errors specifically
+        document.addEventListener('htmx:afterRequest', function(event) {
+            if (event.detail.pathInfo.requestPath.includes('send-mail')) {
+                if (event.detail.xhr.status === 200) {
+                    // Success - show success message
+                    Swal.fire({
+                        title: 'Success',
+                        text: 'Email sent successfully!',
+                        icon: 'success',
+                        timer: 2000,
+                        showConfirmButton: false
+                    });
+                } else if (event.detail.xhr.status >= 400) {
+                    // Error - show error message
+                    Swal.fire({
+                        title: 'Email Error',
+                        text: 'Failed to send email. Please check your email configuration.',
+                        icon: 'error',
+                        confirmButtonText: 'OK'
+                    });
+                }
+            }
+        });
     </script>
     <title class="time-runner stop-runner">{{white_label_company_name}}</title>
     <link rel="stylesheet" href="{% static 'build/css/driver.min.css' %}" />
@@ -246,6 +300,8 @@
     <script src="{% static '/base/time_formatting.js' %}"></script>
     <script src="{% static '/base/time_settings.js' %}"></script>
     <script src="{% static '/base/date_formatting.js' %}"></script>
+    <script src="{% static 'js/fixes.js' %}"></script>
+    <script src="{% static 'js/email-fixes.js' %}"></script>
 
     <script src="{% static 'build/js/pivottable.min.js' %}"></script>
     <script src="{% static 'build/js/pivottable_plot.min.js' %}"></script>
