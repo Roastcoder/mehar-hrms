@@ -3,6 +3,7 @@ from django.urls import path, re_path
 from django.utils.translation import gettext_lazy as _
 
 from base import announcement, request_and_approve, views
+from base.email_test_views import EmailTestView
 from base.forms import (
     HolidayForm,
     MailTemplateForm,
@@ -155,11 +156,11 @@ urlpatterns = [
         views.mail_server_create_or_update,
         name="mail-server-create-update",
     ),
-    path(
-        "settings/mail-server-test-email/",
+    path("settings/mail-server-test-email/",
         views.mail_server_test_email,
         name="mail-server-test-email",
     ),
+    path("test-email/", EmailTestView.as_view(), name="test-email"),
     path("mail-server-delete", views.mail_server_delete, name="mail-server-delete"),
     path(
         "replace-primary-mail", views.replace_primary_mail, name="replace-primary-mail"
