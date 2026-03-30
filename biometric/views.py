@@ -9,6 +9,7 @@ registered on biometric devices.
 import json
 import logging
 import hashlib
+from collections import defaultdict
 from datetime import datetime, timedelta
 from threading import Event, Thread
 from urllib.parse import parse_qs, unquote
@@ -2356,45 +2357,65 @@ def zk_biometric_attendance_logs(device_or_devices):
     combined_attendances.sort(key=lambda a: a.timestamp)
     stats["new_logs_found"] = len(combined_attendances)
 
+    mapped_attendances = defaultdict(list)
     for attendance in combined_attendances:
-        user_id = attendance.user_id
-        punch_code = attendance.punch
+        bio_id = bio_id_map.get((attendance.device.id, attendance.user_id))
+        if not bio_id:
+            continue
+        attendance.employee = bio_id.employee_id
+        date_time = django_timezone.make_aware(attendance.timestamp)
+        mapped_attendances[(bio_id.employee_id.id, date_time.date())].append(attendance)
+
+    selected_attendances = []
+    for daily_attendances in mapped_attendances.values():
+        daily_attendances.sort(key=lambda att: att.timestamp)
+        first_attendance = daily_attendances[0]
+        first_attendance.punch = 0
+        selected_attendances.append(first_attendance)
+
+        last_attendance = daily_attendances[-1]
+        if last_attendance.timestamp != first_attendance.timestamp:
+            last_attendance.punch = 1
+            selected_attendances.append(last_attendance)
+
+    selected_attendances.sort(key=lambda a: a.timestamp)
+
+    for attendance in selected_attendances:
         date_time = django_timezone.make_aware(attendance.timestamp)
         date = date_time.date()
         time = date_time.time()
-        device_id = attendance.device.id
-        bio_id = bio_id_map.get((device_id, user_id))
-        if bio_id:
-            stats["logs_mapped_to_employees"] += 1
-            is_duplicate = AttendanceActivity.objects.filter(
-                employee_id=bio_id.employee_id,
-                in_datetime=date_time,
-            ).exists() or AttendanceActivity.objects.filter(
-                employee_id=bio_id.employee_id,
-                out_datetime=date_time,
-            ).exists()
-            if is_duplicate:
-                stats["duplicates_skipped"] += 1
-                continue
+        employee = attendance.employee
 
-            request_data = Request(
-                user=bio_id.employee_id.employee_user_id,
-                date=date,
-                time=time,
-                datetime=date_time,
+        stats["logs_mapped_to_employees"] += 1
+        is_duplicate = AttendanceActivity.objects.filter(
+            employee_id=employee,
+            in_datetime=date_time,
+        ).exists() or AttendanceActivity.objects.filter(
+            employee_id=employee,
+            out_datetime=date_time,
+        ).exists()
+        if is_duplicate:
+            stats["duplicates_skipped"] += 1
+            continue
+
+        request_data = Request(
+            user=employee.employee_user_id,
+            date=date,
+            time=time,
+            datetime=date_time,
+        )
+        try:
+            if attendance.punch in {0, 3, 4}:
+                clock_in(request_data)
+            elif attendance.punch in {1, 2, 5}:
+                clock_out(request_data)
+        except Exception:
+            logger.error(
+                f"[Device: {attendance.device.name}] Punch processing error",
+                exc_info=True,
             )
-            try:
-                if punch_code in {0, 3, 4}:
-                    clock_in(request_data)
-                elif punch_code in {1, 2, 5}:
-                    clock_out(request_data)
-            except Exception:
-                logger.error(
-                    f"[Device: {attendance.device.name}] Punch processing error",
-                    exc_info=True,
-                )
 
-    return len(combined_attendances), "; ".join(errors) if errors else None, stats
+    return len(selected_attendances), "; ".join(errors) if errors else None, stats
 
 
 def zk_biometric_attendance_scheduler(device_id):
