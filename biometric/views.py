@@ -61,6 +61,8 @@ from .models import BiometricDevices, BiometricEmployees, COSECAttendanceArgumen
 logger = logging.getLogger(__name__)
 ADMS_LAST_SEEN_ANY_KEY = "zkteco_adms_last_seen_any"
 ADMS_LAST_SEEN_SN_PREFIX = "zkteco_adms_last_seen_sn_"
+CHECKOUT_CUTOFF_TIME = datetime.strptime("17:50", "%H:%M").time()
+OUT_PUNCH_CODES = {1, 2, 5}
 
 
 def _sn_cache_key(sn: str) -> str:
@@ -88,6 +90,32 @@ def _get_adms_last_seen_for_device(device):
     if not last_seen:
         last_seen = cache.get(ADMS_LAST_SEEN_ANY_KEY)
     return last_seen
+
+
+def _select_checkout_attendance(daily_attendances):
+    """
+    Select the checkout punch for a day.
+
+    Prefer the latest punch at or after 5:50 PM. If none exist, use the latest
+    OUT punch before 5:50 PM. As a final fallback, use the last punch of the day.
+    """
+    checkout_after_cutoff = [
+        attendance
+        for attendance in daily_attendances
+        if attendance.timestamp.time() >= CHECKOUT_CUTOFF_TIME
+    ]
+    if checkout_after_cutoff:
+        return checkout_after_cutoff[-1]
+
+    checkout_before_cutoff = [
+        attendance
+        for attendance in daily_attendances
+        if attendance.punch in OUT_PUNCH_CODES
+    ]
+    if checkout_before_cutoff:
+        return checkout_before_cutoff[-1]
+
+    return daily_attendances[-1]
 
 
 def str_time_seconds(time):
@@ -2373,7 +2401,7 @@ def zk_biometric_attendance_logs(device_or_devices):
         first_attendance.punch = 0
         selected_attendances.append(first_attendance)
 
-        last_attendance = daily_attendances[-1]
+        last_attendance = _select_checkout_attendance(daily_attendances)
         if last_attendance.timestamp != first_attendance.timestamp:
             last_attendance.punch = 1
             selected_attendances.append(last_attendance)
